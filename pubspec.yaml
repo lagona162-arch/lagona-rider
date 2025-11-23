@@ -1,0 +1,60 @@
+name: lagona_rider_app
+description: "Lagona Rider App - Multi-role delivery and logistics application"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.1.0
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # Supabase
+  supabase_flutter: ^2.5.6
+  
+  # Google Maps
+  google_maps_flutter: ^2.5.3
+  geolocator: ^12.0.0
+  geocoding: ^3.0.0
+  
+  # Image Handling
+  image_picker: ^1.0.7
+  cached_network_image: ^3.3.1
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  
+  # HTTP & JSON
+  http: ^1.2.0
+  json_annotation: ^4.8.1
+  
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.3.3
+  url_launcher: ^6.2.4
+  flutter_dotenv: ^5.1.0
+  
+  # QR Code
+  qr_flutter: ^4.1.0
+  
+  # File handling
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  json_serializable: ^6.7.1
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
