@@ -40,10 +40,10 @@ android {
         versionName = flutter.versionName
         
         // Google Maps API Key from .env file
-        // Try to get from .env file first, then from gradle properties, then fallback
+        // Try to get from .env file first, then from gradle properties
         val googleMapsApiKey = envProperties.getProperty("GOOGLE_MAPS_API_KEY")?.trim()
             ?: project.findProperty("GOOGLE_MAPS_API_KEY") as String?
-            ?: "AIzaSyC4EMDLfV7JG21k6yvAu_uRriVQadyIEGg" // Fallback to hardcoded value
+            ?: throw GradleException("GOOGLE_MAPS_API_KEY is not set in .env file or gradle.properties. Please configure it.")
         
         // Create a string resource that can be used in AndroidManifest.xml
         resValue("string", "google_maps_api_key", googleMapsApiKey)

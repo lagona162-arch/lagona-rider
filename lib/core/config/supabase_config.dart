@@ -1,7 +1,31 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class SupabaseConfig {
-  static const String url = 'https://lpcjaxssqvgvgtvwabkv.supabase.co';
-  static const String anonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwY2pheHNzcXZndmd0dndhYmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyNzk4NzAsImV4cCI6MjA3NTg1NTg3MH0.P8bMu0__Y2tYaE0kbHnpDHPMAQ421gCeHSIEaURLR2Q';
-  static const String projectId = 'lpcjaxssqvgvgtvwabkv';
+  static String get url {
+    final envUrl = dotenv.env['SUPABASE_URL'];
+    if (envUrl == null || envUrl.isEmpty) {
+      throw Exception(
+          'SUPABASE_URL is not set in .env file. Please check your .env configuration.');
+    }
+    return envUrl;
+  }
+
+  static String get anonKey {
+    final envKey = dotenv.env['SUPABASE_ANON_KEY'];
+    if (envKey == null || envKey.isEmpty) {
+      throw Exception(
+          'SUPABASE_ANON_KEY is not set in .env file. Please check your .env configuration.');
+    }
+    return envKey;
+  }
+
+  static String get projectId {
+    final envProjectId = dotenv.env['SUPABASE_PROJECT_ID'];
+    if (envProjectId == null || envProjectId.isEmpty) {
+      throw Exception(
+          'SUPABASE_PROJECT_ID is not set in .env file. Please check your .env configuration.');
+    }
+    return envProjectId;
+  }
 }
 
