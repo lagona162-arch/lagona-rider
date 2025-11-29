@@ -3,13 +3,13 @@ import 'supabase_service.dart';
 import 'location_service.dart';
 import '../constants/app_constants.dart';
 
-/// Delivery service for riders
-/// Handles delivery operations for riders (accepting, updating status, etc.)
+
+
 class DeliveryService {
   final _supabase = SupabaseService.instance;
 
-  /// Get deliveries for riders
-  /// Riders can see deliveries assigned to them or available deliveries from their loading station
+
+
   Future<List<DeliveryModel>> getDeliveries({
     String? riderId,
     String? status,
@@ -37,9 +37,9 @@ class DeliveryService {
     }
   }
 
-  /// Get deliveries within a radius (in km) from rider's location
-  /// This filters deliveries client-side to avoid expensive database queries
-  /// Returns deliveries within the specified radius from the rider's location
+
+
+
   Future<List<DeliveryModel>> getDeliveriesWithinRadius({
     required double riderLatitude,
     required double riderLongitude,
@@ -50,7 +50,7 @@ class DeliveryService {
     try {
       final locationService = LocationService();
 
-      // Get all available deliveries (we'll filter by radius client-side)
+
       var query = _supabase.from('deliveries').select();
 
       if (loadingStationId != null) {
@@ -65,14 +65,14 @@ class DeliveryService {
           .map((json) => DeliveryModel.fromJson(json as Map<String, dynamic>))
           .toList();
 
-      // Filter deliveries within radius
+
       final nearbyDeliveries = allDeliveries.where((delivery) {
-        // Only include deliveries with pickup coordinates
+
         if (delivery.pickupLatitude == null || delivery.pickupLongitude == null) {
           return false;
         }
 
-        // Calculate distance from rider to pickup location
+
         final distance = locationService.calculateDistance(
           riderLatitude,
           riderLongitude,
@@ -80,7 +80,7 @@ class DeliveryService {
           delivery.pickupLongitude!,
         );
 
-        // Return deliveries within radius
+
         return distance <= radiusKm;
       }).toList();
 
@@ -90,7 +90,7 @@ class DeliveryService {
     }
   }
 
-  /// Get delivery by ID
+
   Future<DeliveryModel?> getDeliveryById(String deliveryId) async {
     try {
       final response = await _supabase
@@ -111,12 +111,26 @@ class DeliveryService {
 
   Future<DeliveryModel> updateDeliveryStatus(
     String deliveryId,
-    String status,
-  ) async {
+    String status, {
+    String? pickupPhotoUrl,
+    String? dropoffPhotoUrl,
+  }) async {
     try {
+      final updateData = <String, dynamic>{
+        'status': status,
+      };
+
+
+      if (pickupPhotoUrl != null) {
+        updateData['pickup_photo_url'] = pickupPhotoUrl;
+      }
+      if (dropoffPhotoUrl != null) {
+        updateData['dropoff_photo_url'] = dropoffPhotoUrl;
+      }
+
       final response = await _supabase
           .from('deliveries')
-          .update({'status': status})
+          .update(updateData)
           .eq('id', deliveryId)
           .select()
           .single();
@@ -127,7 +141,7 @@ class DeliveryService {
     }
   }
 
-  /// Check if rider has any active deliveries (not completed or cancelled)
+
   Future<bool> hasActiveDelivery(String riderId) async {
     try {
       final activeStatuses = [
@@ -149,12 +163,12 @@ class DeliveryService {
 
       return response != null;
     } catch (e) {
-      // If there's an error checking, assume they have an active delivery for safety
+
       return true;
     }
   }
 
-  /// Get rider's active delivery (if any)
+
   Future<DeliveryModel?> getActiveDelivery(String riderId) async {
     try {
       final activeStatuses = [
@@ -187,7 +201,7 @@ class DeliveryService {
 
   Future<DeliveryModel> assignRider(String deliveryId, String riderId) async {
     try {
-      // Check if rider already has an active delivery
+
       final hasActive = await hasActiveDelivery(riderId);
       if (hasActive) {
         throw Exception(
@@ -206,7 +220,7 @@ class DeliveryService {
 
       return DeliveryModel.fromJson(response);
     } catch (e) {
-      // Re-throw our custom exception
+
       if (e.toString().contains('already have an active delivery')) {
         rethrow;
       }

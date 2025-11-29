@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/location_service.dart';
 
-/// Screen to request location permission from the user
+
 class LocationPermissionScreen extends StatefulWidget {
   final VoidCallback? onPermissionGranted;
 
@@ -27,7 +27,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
     });
 
     try {
-      // Check if location services are enabled
+
       final isServiceEnabled = await _locationService.isLocationServiceEnabled();
       
       if (!isServiceEnabled) {
@@ -38,24 +38,24 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
         return;
       }
 
-      // Request permission
+
       final granted = await _locationService.requestPermission();
       
       if (!mounted) return;
 
       if (granted) {
-        // Permission granted - verify it was actually granted
+
         final status = await _locationService.checkPermissionStatus();
         
         if (!mounted) return;
         
         if (status == LocationPermissionStatus.granted) {
-          // Permission is verified - call callback immediately to update parent state
-          // The callback will optimistically update state, preventing black screen
+
+
           if (widget.onPermissionGranted != null) {
             widget.onPermissionGranted!();
-            // The parent AuthWrapper will rebuild and show RiderHomeScreen
-            // Reset _isRequesting to false since we're done
+
+
             if (mounted) {
               setState(() {
                 _isRequesting = false;
@@ -63,7 +63,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
             }
           }
         } else {
-          // Verification failed - show error
+
           if (mounted) {
             setState(() {
               _errorMessage = 'Failed to verify location permission. Please try again.';
@@ -72,7 +72,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
           }
         }
       } else {
-        // Check the specific reason for denial
+
         final status = await _locationService.checkPermissionStatus();
         
         if (!mounted) return;
@@ -116,7 +116,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Location Permission'),
-        automaticallyImplyLeading: false, // Prevent back navigation
+        automaticallyImplyLeading: false, 
       ),
       body: SafeArea(
         child: Padding(
@@ -125,7 +125,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Location icon
+
               Icon(
                 Icons.location_on,
                 size: 120,
@@ -133,7 +133,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
               ),
               const SizedBox(height: 32),
               
-              // Title
+
               Text(
                 'Location Permission Required',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -144,7 +144,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
               ),
               const SizedBox(height: 16),
               
-              // Description
+
               Text(
                 'This app requires location access to track your delivery routes, show your current location on the map, and help you navigate to delivery destinations.',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -155,7 +155,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
               ),
               const SizedBox(height: 8),
               
-              // Additional info
+
               Text(
                 'Your location data is used only for delivery purposes and is not shared with third parties.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -166,7 +166,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
               ),
               const SizedBox(height: 48),
               
-              // Error message
+
               if (_errorMessage != null)
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -197,7 +197,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
                   ),
                 ),
               
-              // Request Permission Button
+
               ElevatedButton(
                 onPressed: _isRequesting ? null : _requestPermission,
                 style: ElevatedButton.styleFrom(
@@ -221,7 +221,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
                       ),
               ),
               
-              // Open Settings Button (if permission is denied)
+
               if (_errorMessage != null)
                 const SizedBox(height: 12),
               if (_errorMessage != null)

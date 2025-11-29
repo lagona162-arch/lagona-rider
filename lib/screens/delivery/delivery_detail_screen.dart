@@ -1,14 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/models/delivery_model.dart';
+import '../../core/models/merchant_rider_payment_model.dart';
 import '../../core/services/delivery_service.dart';
 import '../../core/services/rider_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/google_maps_service.dart';
+import '../../core/services/storage_service.dart';
+import '../../core/services/merchant_rider_payment_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_colors.dart';
@@ -29,9 +35,14 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   final DeliveryService _deliveryService = DeliveryService();
   final LocationService _locationService = LocationService();
   final GoogleMapsService _mapsService = GoogleMapsService();
+  final StorageService _storageService = StorageService();
+  final MerchantRiderPaymentService _paymentService = MerchantRiderPaymentService();
+  final ImagePicker _imagePicker = ImagePicker();
   DeliveryModel? _delivery;
+  MerchantRiderPaymentModel? _payment;
   bool _isLoading = true;
   bool _isUpdating = false;
+  bool _isLoadingPayment = false;
   GoogleMapController? _mapController;
   Position? _currentPosition;
 
@@ -42,7 +53,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     super.initState();
     _loadDelivery();
     _getCurrentLocation();
-    // Update location every 10 seconds to refresh ETA
+
     _locationUpdateTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) => _getCurrentLocation(),
@@ -65,11 +76,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         });
       }
     } catch (e) {
-      // Silently fail - location not critical for viewing
+
     }
   }
 
-  /// Calculate ETA to pickup location
+
   Duration? _calculateETAToPickup() {
     if (_currentPosition == null ||
         _delivery?.pickupLatitude == null ||
@@ -87,7 +98,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     return _locationService.calculateETA(distance);
   }
 
-  /// Calculate ETA to dropoff location
+
   Duration? _calculateETAToDropoff() {
     if (_currentPosition == null ||
         _delivery?.dropoffLatitude == null ||
@@ -113,25 +124,25 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     try {
       final delivery = await _deliveryService.getDeliveryById(widget.deliveryId);
       
-      // Handle auto-assignment: if riderId is set but status is pending, auto-mark as accepted
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (delivery != null && 
           authProvider.user != null &&
           delivery.riderId == authProvider.user!.id &&
           delivery.status == AppConstants.deliveryStatusPending) {
-        // Auto-accept the delivery
+
         try {
           await _deliveryService.updateDeliveryStatus(
             widget.deliveryId,
             AppConstants.deliveryStatusAccepted,
           );
-          // Update rider status to busy
+
           final riderService = RiderService();
           await riderService.updateRiderStatus(
             authProvider.user!.id,
             AppConstants.riderStatusBusy,
           );
-          // Reload delivery with updated status
+
           final updatedDelivery = await _deliveryService.getDeliveryById(widget.deliveryId);
           if (mounted) {
             setState(() {
@@ -141,7 +152,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
           }
           return;
         } catch (e) {
-          // If auto-accept fails, continue with original delivery
+
         }
       }
       
@@ -150,6 +161,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         _delivery = delivery;
         _isLoading = false;
       });
+        
+        if (delivery != null) {
+          _loadPayment();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -160,15 +175,566 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     }
   }
 
-  Future<void> _updateStatus(String status) async {
-    if (_isUpdating) return;
+  Future<void> _loadPayment() async {
+    if (_delivery == null) return;
+    
+    setState(() {
+      _isLoadingPayment = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) return;
+
+      final payment = await _paymentService.getPaymentByRiderIdAndDeliveryId(
+        riderId: authProvider.user!.id,
+        deliveryId: widget.deliveryId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _payment = payment;
+          _isLoadingPayment = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPayment = false;
+        });
+      }
+    }
+  }
+
+
+
+  Future<File?> _showPhotoCaptureDialog(String title) async {
+    return showDialog<File?>(
+      context: context,
+      barrierDismissible: false, 
+      builder: (BuildContext context) {
+        return PopScope(
+          canPop: false, 
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.camera_alt, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(title)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Photo is required to proceed',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Please take or select a photo for verification',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final XFile? image = await _imagePicker.pickImage(
+                              source: ImageSource.camera,
+                              maxWidth: 1920,
+                              maxHeight: 1080,
+                              imageQuality: 85,
+                            );
+                            if (image != null && mounted) {
+                              Navigator.of(context).pop(File(image.path));
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please take a photo to continue'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error taking photo: $e'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Camera'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final XFile? image = await _imagePicker.pickImage(
+                              source: ImageSource.gallery,
+                              maxWidth: 1920,
+                              maxHeight: 1080,
+                              imageQuality: 85,
+                            );
+                            if (image != null && mounted) {
+                              Navigator.of(context).pop(File(image.path));
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please select a photo to continue'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error picking photo: $e'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Gallery'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showPaymentConfirmationDialog() async {
+    if (_payment == null) return false;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.payment, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text('Confirm Payment Receipt'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Payment Details',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPaymentDetailRow('Amount', '₱${_payment!.amount.toStringAsFixed(2)}'),
+                      _buildPaymentDetailRow('GCash Number', _payment!.riderGcashNumber),
+                      if (_payment!.referenceNumber != null)
+                        _buildPaymentDetailRow('Reference Number', _payment!.referenceNumber!),
+                      if (_payment!.senderName != null)
+                        _buildPaymentDetailRow('Sender Name', _payment!.senderName!),
+                    ],
+                  ),
+                ),
+                if (_payment!.proofPhotoUrl != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Payment Proof',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: _payment!.proofPhotoUrl!,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        height: 200,
+                        color: Colors.grey[300],
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        height: 200,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.error),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Please verify that you have received the payment in your GCash account before confirming.',
+                          style: TextStyle(
+                            color: Colors.orange[900],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(true);
+                await _confirmPayment();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+              ),
+              child: const Text('Confirm Received'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(false);
+                await _rejectPayment();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+              ),
+              child: const Text('Reject'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPaymentDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentStatusCard() {
+    if (_payment == null) return const SizedBox.shrink();
+
+    final isConfirmed = _payment!.isConfirmed;
+    final isPending = _payment!.isPending;
+    final isRejected = _payment!.isRejected;
+
+    Color cardColor;
+    Color borderColor;
+    IconData icon;
+    String statusText;
+    String statusMessage;
+
+    if (isConfirmed) {
+      cardColor = AppColors.success.withValues(alpha: 0.1);
+      borderColor = AppColors.success;
+      icon = Icons.check_circle;
+      statusText = 'Payment Confirmed';
+      statusMessage = 'You have confirmed receipt of payment. You can now proceed to pick up the delivery.';
+    } else if (isRejected) {
+      cardColor = AppColors.error.withValues(alpha: 0.1);
+      borderColor = AppColors.error;
+      icon = Icons.cancel;
+      statusText = 'Payment Rejected';
+      statusMessage = 'Payment has been rejected. Please contact the merchant.';
+    } else {
+      cardColor = Colors.orange.withValues(alpha: 0.1);
+      borderColor = Colors.orange;
+      icon = Icons.payment;
+      statusText = 'Payment Pending Confirmation';
+      statusMessage = 'Please confirm that you have received payment of ₱${_payment!.amount.toStringAsFixed(2)} before proceeding.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: borderColor.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: borderColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: borderColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Amount: ₱${_payment!.amount.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            statusMessage,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          if (isPending) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showPaymentConfirmationDialog(),
+                icon: const Icon(Icons.visibility, size: 18),
+                label: const Text('View Payment Details'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmPayment() async {
+    if (_payment == null) return;
     
     setState(() {
       _isUpdating = true;
     });
 
     try {
-      await _deliveryService.updateDeliveryStatus(widget.deliveryId, status);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _paymentService.confirmPayment(
+        paymentId: _payment!.id,
+        riderId: authProvider.user!.id,
+      );
+
+      await _loadPayment();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Payment confirmed successfully'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error confirming payment: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _rejectPayment() async {
+    if (_payment == null) return;
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _paymentService.rejectPayment(
+        paymentId: _payment!.id,
+        riderId: authProvider.user!.id,
+      );
+
+      await _loadPayment();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Payment rejected'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error rejecting payment: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateStatus(String status, {String? pickupPhotoUrl, String? dropoffPhotoUrl, bool skipLoadingState = false}) async {
+    if (!skipLoadingState && _isUpdating) return;
+    
+    if (!skipLoadingState) {
+    setState(() {
+      _isUpdating = true;
+    });
+    }
+
+    try {
+      await _deliveryService.updateDeliveryStatus(
+        widget.deliveryId,
+        status,
+        pickupPhotoUrl: pickupPhotoUrl,
+        dropoffPhotoUrl: dropoffPhotoUrl,
+      );
       await _loadDelivery();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -186,6 +752,198 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
             content: Text('Error: $e'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (!skipLoadingState && mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _markAsPickedUp() async {
+    if (_isUpdating) return;
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.user == null) return;
+
+    if (_delivery?.merchantId != null) {
+      await _loadPayment();
+      
+      if (_payment == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment confirmation required. Please wait for merchant to make payment.'),
+              backgroundColor: AppColors.error,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (_payment!.isPending) {
+        final confirmed = await _showPaymentConfirmationDialog();
+        if (confirmed != true) {
+          return;
+        }
+        await _loadPayment();
+        
+        if (_payment == null || !_payment!.isConfirmed) {
+          return;
+        }
+      } else if (!_payment!.isConfirmed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment must be confirmed before proceeding.'),
+              backgroundColor: AppColors.error,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    final photoFile = await _showPhotoCaptureDialog('Pickup Photo Required');
+    if (photoFile == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo is required to mark as picked up'),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final photoUrl = await _storageService.uploadDeliveryPhoto(
+        deliveryId: widget.deliveryId,
+        imageFile: photoFile,
+        photoType: 'pickup',
+        riderId: authProvider.user!.id,
+      );
+
+      await _updateStatus(
+        AppConstants.deliveryStatusPickedUp,
+        pickupPhotoUrl: photoUrl,
+        skipLoadingState: true,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      await _updateStatus(
+        AppConstants.deliveryStatusInTransit,
+        skipLoadingState: true,
+      );
+
+      if (mounted) {
+        await _loadDelivery();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Delivery marked as picked up and in transit'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _markAsCompleted() async {
+    if (_isUpdating) return;
+
+
+    final photoFile = await _showPhotoCaptureDialog('Dropoff Photo Required');
+    if (photoFile == null) {
+
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo is required to complete delivery'),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final photoUrl = await _storageService.uploadDeliveryPhoto(
+        deliveryId: widget.deliveryId,
+        imageFile: photoFile,
+        photoType: 'dropoff',
+        riderId: authProvider.user!.id,
+      );
+
+
+      await _updateStatus(
+        AppConstants.deliveryStatusCompleted,
+        dropoffPhotoUrl: photoUrl,
+        skipLoadingState: true,
+      );
+
+      if (authProvider.user != null) {
+        final riderService = RiderService();
+        await riderService.updateRiderStatus(
+          authProvider.user!.id,
+          AppConstants.riderStatusAvailable,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -248,12 +1006,15 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     final statuses = [
       AppConstants.deliveryStatusPending,
       AppConstants.deliveryStatusAccepted,
+      AppConstants.deliveryStatusPrepared,
+      AppConstants.deliveryStatusReady,
       AppConstants.deliveryStatusPickedUp,
       AppConstants.deliveryStatusInTransit,
       AppConstants.deliveryStatusCompleted,
     ];
 
     final currentIndex = statuses.indexOf(_delivery!.status);
+    final isValidStatus = currentIndex >= 0;
     
     return Card(
       elevation: 2,
@@ -276,19 +1037,45 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                 ),
               ],
             ),
+            if (!isValidStatus) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: AppColors.error, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Current Status: ${_getStatusLabel(_delivery!.status)}',
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             ...statuses.asMap().entries.map((entry) {
               final index = entry.key;
               final status = entry.value;
-              final isCompleted = currentIndex > index;
-              final isCurrent = currentIndex == index;
-              final isPending = currentIndex < index;
+              final isCompleted = isValidStatus && currentIndex > index;
+              final isCurrent = isValidStatus && currentIndex == index;
+              final isPending = isValidStatus && currentIndex < index;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Row(
                   children: [
-                    // Status indicator
+
                     Container(
                       width: 32,
                       height: 32,
@@ -313,7 +1100,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                               : null,
                     ),
                     const SizedBox(width: 12),
-                    // Status text
+
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,10 +1182,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
 
     String url;
     if (_currentPosition != null) {
-      // Navigation from current location to destination
       url = 'https://www.google.com/maps/dir/?api=1&destination=$destinationLat,$destinationLng&destination_place_id=${destinationLabel ?? ''}';
     } else {
-      // Just show destination if current location not available
       url = 'https://www.google.com/maps/search/?api=1&query=$destinationLat,$destinationLng';
     }
 
@@ -421,7 +1206,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   Set<Marker> _buildMapMarkers() {
     final markers = <Marker>{};
     
-    // Pickup marker (green)
+
     if (_delivery!.pickupLatitude != null && _delivery!.pickupLongitude != null) {
       markers.add(
         GoogleMapsService.createMarker(
@@ -434,7 +1219,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
       );
     }
     
-    // Dropoff marker (red)
+
     if (_delivery!.dropoffLatitude != null && _delivery!.dropoffLongitude != null) {
       markers.add(
         GoogleMapsService.createMarker(
@@ -447,7 +1232,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
       );
     }
     
-    // Current location marker (blue, if available)
+
     if (_currentPosition != null) {
       markers.add(
         GoogleMapsService.createMarker(
@@ -464,7 +1249,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   }
 
   CameraPosition _getInitialCameraPosition() {
-    // If we have both pickup and dropoff, center between them
+
     if (_delivery!.pickupLatitude != null &&
         _delivery!.pickupLongitude != null &&
         _delivery!.dropoffLatitude != null &&
@@ -477,7 +1262,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
       );
     }
     
-    // Otherwise, use pickup or dropoff
+
     if (_delivery!.pickupLatitude != null && _delivery!.pickupLongitude != null) {
       return GoogleMapsService.createCameraPosition(
         target: LatLng(_delivery!.pickupLatitude!, _delivery!.pickupLongitude!),
@@ -492,7 +1277,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
       );
     }
     
-    // Default to Manila
+
     return GoogleMapsService.createCameraPosition(
       target: const LatLng(14.5995, 120.9842),
       zoom: 12.0,
@@ -535,7 +1320,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Delivery Header Card
+
                         Card(
                           elevation: 3,
                           shape: RoundedRectangleBorder(
@@ -667,10 +1452,10 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Status Stepper
+
                         _buildStatusStepper(),
                       const SizedBox(height: 16),
-                        // Pickup Location Card
+
                       Card(
                           elevation: 2,
                           shape: RoundedRectangleBorder(
@@ -740,7 +1525,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                       ),
                                     ],
                                   ),
-                                  // ETA to Pickup (only show if not picked up yet and we have current location)
+
                                   if (_currentPosition != null &&
                                       _delivery!.status != AppConstants.deliveryStatusPickedUp &&
                                       _delivery!.status != AppConstants.deliveryStatusInTransit &&
@@ -785,7 +1570,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                        // Dropoff Location Card
+
                       Card(
                           elevation: 2,
                           shape: RoundedRectangleBorder(
@@ -855,7 +1640,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                 ),
                                     ],
                                   ),
-                                  // ETA to Dropoff (only show if picked up and we have current location)
+
                                   if (_currentPosition != null &&
                                       (_delivery!.status == AppConstants.deliveryStatusPickedUp ||
                                        _delivery!.status == AppConstants.deliveryStatusInTransit)) ...[
@@ -899,14 +1684,134 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Action Buttons Section
+
+                        if (_delivery!.pickupPhotoUrl != null || _delivery!.dropoffPhotoUrl != null)
+                          Card(
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.photo_library, color: AppColors.primary),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Delivery Photos',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (_delivery!.pickupPhotoUrl != null) ...[
+                                    const Text(
+                                      'Pickup Photo',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (context) => _PhotoViewScreen(
+                                              imageUrl: _delivery!.pickupPhotoUrl!,
+                                              title: 'Pickup Photo',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                          imageUrl: _delivery!.pickupPhotoUrl!,
+                                          width: double.infinity,
+                                          height: 200,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            height: 200,
+                                            color: Colors.grey[200],
+                                            child: const Center(
+                                              child: CircularProgressIndicator(),
+                                            ),
+                                          ),
+                                          errorWidget: (context, url, error) => Container(
+                                            height: 200,
+                                            color: Colors.grey[200],
+                                            child: const Icon(Icons.error),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                  if (_delivery!.dropoffPhotoUrl != null) ...[
+                                    const Text(
+                                      'Dropoff Photo',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (context) => _PhotoViewScreen(
+                                              imageUrl: _delivery!.dropoffPhotoUrl!,
+                                              title: 'Dropoff Photo',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                          imageUrl: _delivery!.dropoffPhotoUrl!,
+                                          width: double.infinity,
+                                          height: 200,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            height: 200,
+                                            color: Colors.grey[200],
+                                            child: const Center(
+                                              child: CircularProgressIndicator(),
+                                            ),
+                                          ),
+                                          errorWidget: (context, url, error) => Container(
+                                            height: 200,
+                                            color: Colors.grey[200],
+                                            child: const Icon(Icons.error),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
                         Consumer<AuthProvider>(
                           builder: (context, authProvider, _) {
                             if (authProvider.user == null) {
                               return const SizedBox.shrink();
                             }
 
-                            // Check if this delivery is assigned to current rider
+
                             final isAssignedToMe = authProvider.user != null &&
                                 _delivery!.riderId == authProvider.user!.id;
 
@@ -935,7 +1840,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                     ),
                         const SizedBox(height: 16),
                                     
-                                    // Accept Delivery (for pending deliveries not assigned to anyone)
+
                                     if (_delivery!.status == AppConstants.deliveryStatusPending &&
                                         _delivery!.riderId == null)
                                       FutureBuilder<bool>(
@@ -987,7 +1892,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                           );
                                         },
                                       ),
-                                    // Accept Delivery (if assigned to me but status is still pending - fallback)
+
                                     if (isAssignedToMe &&
                                         _delivery!.status == AppConstants.deliveryStatusPending)
                                       _buildActionButton(
@@ -997,19 +1902,89 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                         icon: Icons.check_circle,
                                         isPrimary: true,
                                       ),
-                                    // Mark as Picked Up (for accepted/ready/prepared - only if assigned to me)
+
                                     if (isAssignedToMe &&
-                                        (_delivery!.status == AppConstants.deliveryStatusAccepted ||
-                                         _delivery!.status == AppConstants.deliveryStatusReady ||
-                                         _delivery!.status == AppConstants.deliveryStatusPrepared))
+                                        _delivery!.status == AppConstants.deliveryStatusReady) ...[
+                                      if (_delivery!.merchantId != null) ...[
+                                        if (_isLoadingPayment)
+                                          const Padding(
+                                            padding: EdgeInsets.all(16.0),
+                                            child: Center(
+                                              child: CircularProgressIndicator(),
+                                            ),
+                                          )
+                                        else if (_payment != null)
+                                          _buildPaymentStatusCard()
+                                        else
+                                          Container(
+                                            padding: const EdgeInsets.all(16),
+                                            margin: const EdgeInsets.only(bottom: 16),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: Colors.orange.withValues(alpha: 0.3),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.payment, color: Colors.orange),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'Waiting for Payment',
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.orange[900],
+                                                          fontSize: 14,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        'Please wait for the merchant to make payment before proceeding.',
+                                                        style: TextStyle(
+                                                          color: Colors.orange[900],
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
                                       _buildActionButton(
-                                        label: 'Mark as Picked Up',
-                                        onPressed: () => _updateStatus(AppConstants.deliveryStatusPickedUp),
-                                        color: Colors.blue,
-                                        icon: Icons.inventory_2,
-                                        isPrimary: true,
+                                        label: _payment != null && !_payment!.isConfirmed
+                                            ? 'Confirm Payment First'
+                                            : 'Mark as Picked Up (Photo Required)',
+                                        onPressed: (_payment == null || _payment!.isConfirmed)
+                                            ? _markAsPickedUp
+                                            : () {
+                                                if (_payment!.isPending) {
+                                                  _showPaymentConfirmationDialog();
+                                                } else {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('Payment must be confirmed before proceeding.'),
+                                                      backgroundColor: AppColors.error,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                        color: (_payment == null || _payment!.isConfirmed)
+                                            ? Colors.blue
+                                            : Colors.grey,
+                                        icon: (_payment == null || _payment!.isConfirmed)
+                                            ? Icons.camera_alt
+                                            : Icons.payment,
+                                        isPrimary: (_payment == null || _payment!.isConfirmed),
                                       ),
-                                    // Start Delivery / In Transit (for picked up - only if assigned to me)
+                                    ],
+
                                     if (isAssignedToMe &&
                                         _delivery!.status == AppConstants.deliveryStatusPickedUp)
                                       _buildActionButton(
@@ -1019,7 +1994,17 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                         icon: Icons.directions_car,
                                         isPrimary: true,
                                       ),
-                                    // Show loading indicator (non-blocking, shows alongside buttons)
+
+                                    if (isAssignedToMe &&
+                                        _delivery!.status == AppConstants.deliveryStatusInTransit)
+                                      _buildActionButton(
+                                        label: 'Complete Delivery (Photo Required)',
+                                        onPressed: _markAsCompleted,
+                                        color: AppColors.statusCompleted,
+                                        icon: Icons.camera_alt,
+                                        isPrimary: true,
+                                      ),
+
                                     if (_isUpdating)
                                       Container(
                                         padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -1039,7 +2024,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                           ],
                                         ),
                                       ),
-                                    // Show message if delivery is assigned to someone else
+
                                     if (_delivery!.riderId != null && !isAssignedToMe)
                                       Container(
                                         padding: const EdgeInsets.all(16),
@@ -1064,7 +2049,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                       ],
                                         ),
                                       ),
-                                    // Show message if delivery is completed or cancelled
+
                                     if (_delivery!.status == AppConstants.deliveryStatusCompleted ||
                                         _delivery!.status == AppConstants.deliveryStatusCancelled)
                                       Container(
@@ -1104,7 +2089,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                           },
                         ),
                       const SizedBox(height: 16),
-                        // Map View Card
+
                       Card(
                           elevation: 2,
                           shape: RoundedRectangleBorder(
@@ -1129,7 +2114,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                // Google Maps Widget
+
                                 if (_delivery!.pickupLatitude != null &&
                                     _delivery!.pickupLongitude != null &&
                                     _delivery!.dropoffLatitude != null &&
@@ -1185,7 +2170,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                     ),
                                   ),
                                 const SizedBox(height: 16),
-                                // Navigation Buttons
+
                                 if (_delivery!.pickupLatitude != null &&
                                     _delivery!.pickupLongitude != null &&
                                     _delivery!.dropoffLatitude != null &&
@@ -1260,7 +2245,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         return false;
       }
 
-      // Check if rider already has an active delivery
+
       final hasActive = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
       return !hasActive;
     } catch (e) {
@@ -1281,13 +2266,13 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         throw Exception('User not authenticated');
       }
 
-      // Check if user is active before allowing delivery acceptance
+
       if (authProvider.user?.isActive != true) {
         throw Exception(
             'Your account is pending admin approval. You cannot accept deliveries until your account is approved.');
       }
 
-      // Check if rider already has an active delivery
+
       final hasActive = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
       if (hasActive) {
         final activeDelivery = await _deliveryService.getActiveDelivery(authProvider.user!.id);
@@ -1297,7 +2282,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
 
       await _deliveryService.assignRider(widget.deliveryId, authProvider.user!.id);
       
-      // Update rider status to busy
+
       final riderService = RiderService();
       await riderService.updateRiderStatus(
         authProvider.user!.id,
@@ -1334,4 +2319,32 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     }
   }
 
+}
+
+
+class _PhotoViewScreen extends StatelessWidget {
+  final String imageUrl;
+  final String title;
+
+  const _PhotoViewScreen({
+    required this.imageUrl,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: Center(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          fit: BoxFit.contain,
+          placeholder: (context, url) => const CircularProgressIndicator(),
+          errorWidget: (context, url, error) => const Icon(Icons.error),
+        ),
+      ),
+    );
+  }
 }

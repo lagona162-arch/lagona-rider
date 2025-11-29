@@ -14,7 +14,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _user != null;
 
   Future<bool> signIn(String email, String password) async {
-    // Clear previous state
+
     _user = null;
     _error = null;
     _isLoading = true;
@@ -26,13 +26,13 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       _isLoading = false;
-      _error = null; // Clear any previous errors on success
+      _error = null; 
       notifyListeners();
       return _user != null;
     } catch (e) {
-      // Ensure user is null on error
+
       _user = null;
-      _error = e.toString().replaceAll('Exception: ', ''); // Clean up error message
+      _error = e.toString().replaceAll('Exception: ', ''); 
       _isLoading = false;
       notifyListeners();
       return false;
@@ -46,7 +46,7 @@ class AuthProvider extends ChangeNotifier {
     String? phone,
     String? plateNumber,
     String? vehicleType,
-    // New fields
+
     String? lastname,
     String? firstname,
     String? middleInitial,
@@ -61,7 +61,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // This is a rider-only app, so role is always 'rider'
+
       _user = await _authService.signUp(
         email: email,
         password: password,
@@ -99,17 +99,17 @@ class AuthProvider extends ChangeNotifier {
     if (_authService.isAuthenticated && _authService.currentUserId != null) {
       try {
         _user = await _authService.getUser(_authService.currentUserId!);
-        _error = null; // Clear any previous errors
+        _error = null; 
         notifyListeners();
       } catch (e) {
-        // If loading user fails, sign out to prevent stuck state
+
         _user = null;
         _error = e.toString();
-        await signOut(); // Clear the session
+        await signOut(); 
         notifyListeners();
       }
     } else {
-      // If not authenticated, ensure user is null
+
       _user = null;
       notifyListeners();
     }

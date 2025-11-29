@@ -1,11 +1,11 @@
 import 'supabase_service.dart';
 
-/// Registration service for riders
-/// Handles rider registration with Loading Station Code (LSCODE)
+
+
 class RegistrationService {
   final _supabase = SupabaseService.instance;
 
-  /// Validate if a Loading Station Code (LSCODE) exists
+
   Future<bool> validateLSCode(String lsCode) async {
     try {
       final response = await _supabase
@@ -19,7 +19,7 @@ class RegistrationService {
     }
   }
 
-  /// Get Loading Station ID by LSCODE
+
   Future<String?> getLoadingStationIdByLSCode(String lsCode) async {
     try {
       final response = await _supabase
@@ -33,7 +33,7 @@ class RegistrationService {
     }
   }
 
-  /// Link rider to loading station using LSCODE
+
   Future<void> linkRiderToLoadingStation(
     String riderId,
     String lsCode,
@@ -53,7 +53,7 @@ class RegistrationService {
     }
   }
 
-  /// Update rider details (plate number, vehicle type, and all document URLs)
+
   Future<void> updateRiderDetails(
     String riderId, {
     String? plateNumber,

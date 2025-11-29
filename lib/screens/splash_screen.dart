@@ -27,25 +27,25 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _setupAnimations() {
-    // Controller for smooth horizontal movement (driving forward)
+
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat();
 
-    // Controller for vertical bounce (road bumps) - faster frequency
+
     _bounceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..repeat(reverse: true);
 
-    // Controller for smoke particles
+
     _smokeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat();
 
-    // Slide animation - smooth continuous forward movement
+
     _slideAnimation = Tween<double>(
       begin: -100.0,
       end: 100.0,
@@ -54,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
       curve: Curves.linear,
     ));
 
-    // Bounce animation - subtle vertical movement (like road bumps)
+
     _bounceAnimation = Tween<double>(
       begin: 0.0,
       end: -6.0,
@@ -73,10 +73,10 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initializeApp() async {
-    // Wait for splash screen animation
+
     await Future.delayed(const Duration(seconds: 2));
     
-    // Load user if authenticated
+
     if (mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       await authProvider.loadUser();
@@ -107,7 +107,7 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Animated motorcycle icon - driving effect with smoke
+
               SizedBox(
                 width: 300,
                 height: 150,
@@ -115,7 +115,7 @@ class _SplashScreenState extends State<SplashScreen>
                   alignment: Alignment.center,
                   clipBehavior: Clip.none,
                   children: [
-                    // Smoke particles behind the motorcycle
+
                     AnimatedBuilder(
                       animation: Listenable.merge([_slideController, _bounceController, _smokeController]),
                       builder: (context, child) {
@@ -132,7 +132,7 @@ class _SplashScreenState extends State<SplashScreen>
                         );
                       },
                     ),
-                    // Animated motorcycle with combined movements
+
                     AnimatedBuilder(
                       animation: Listenable.merge([_slideController, _bounceController]),
                       builder: (context, child) {
@@ -142,7 +142,7 @@ class _SplashScreenState extends State<SplashScreen>
                             _bounceAnimation.value,
                           ),
                           child: Transform.rotate(
-                            // Dynamic tilt based on movement direction
+
                             angle: (_slideAnimation.value / 100) * 0.03,
                             child: Icon(
                               Icons.delivery_dining,
@@ -185,7 +185,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-/// Smoke particle widget that animates behind the motorcycle
+
 class _SmokeParticle extends StatelessWidget {
   final AnimationController controller;
   final double delay;
@@ -201,7 +201,7 @@ class _SmokeParticle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Create delayed animation
+
     final delayedAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -217,26 +217,26 @@ class _SmokeParticle extends StatelessWidget {
     return AnimatedBuilder(
       animation: delayedAnimation,
       builder: (context, child) {
-        // Calculate smoke position (behind the motorcycle)
-        // Motorcycle is at center, smoke should be to the left (behind it)
-        // Smoke moves backward and upward as it fades
+
+
+
         final smokeX = slideOffset - 50 - (delayedAnimation.value * 40);
         final smokeY = bounceOffset - (delayedAnimation.value * 30);
         
-        // Opacity fades out as smoke disperses
+
         final opacity = (1.0 - delayedAnimation.value).clamp(0.0, 1.0) * 0.5;
         
-        // Size increases as smoke expands and disperses
+
         final size = 10.0 + (delayedAnimation.value * 25);
 
-        // Only show smoke if it has opacity
+
         if (opacity <= 0.01) {
           return const SizedBox.shrink();
         }
 
         return Positioned(
-          left: 150 + smokeX, // Center of container (300/2) + offset
-          top: 75 + smokeY, // Center vertically (150/2) + offset
+          left: 150 + smokeX, 
+          top: 75 + smokeY, 
           child: Opacity(
             opacity: opacity,
             child: Container(

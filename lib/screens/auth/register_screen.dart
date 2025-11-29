@@ -41,15 +41,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Timer? _addressDebounce;
   final FocusNode _addressFocusNode = FocusNode();
   
-  // Vehicle type is fixed to Motorcycle (two wheels) for now
+
   static const String _vehicleType = 'Motorcycle';
   
-  // Get phone number without dashes for saving
+
   String _getPhoneNumberWithoutDashes() {
     return _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
   }
 
-  // Calculate age from birthdate
+
   int? _calculateAge(DateTime? birthdate) {
     if (birthdate == null) return null;
     final today = DateTime.now();
@@ -61,7 +61,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return age;
   }
 
-  // Check if 18 or older
+
   bool _is18OrOlder(DateTime? birthdate) {
     final age = _calculateAge(birthdate);
     return age != null && age >= 18;
@@ -73,7 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _addressController.addListener(_onAddressChanged);
     _addressFocusNode.addListener(() {
       if (!_addressFocusNode.hasFocus) {
-        // Hide suggestions when address field loses focus
+
         setState(() {
           _addressSuggestions = [];
         });
@@ -122,7 +122,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       _addressController.text = formatted;
     } catch (e) {
-      // Silent failure; user can type manually
+
     } finally {
       if (mounted) {
         setState(() {
@@ -152,11 +152,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _onAddressChanged() {
-    // Only suggest when address field is focused
+
     if (!_addressFocusNode.hasFocus) return;
     _addressDebounce?.cancel();
     final query = _addressController.text.trim();
-    // Clear selected coordinates when user edits the address
+
     _selectedLatitude = null;
     _selectedLongitude = null;
     if (query.isEmpty) {
@@ -227,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final lsCode = _codeController.text.trim();
     
-    // Validate LSCODE is not empty
+
     if (lsCode.isEmpty) {
       setState(() {
         _lsCodeError = 'Please enter Loading Station Code';
@@ -241,7 +241,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // Validate LSCODE exists in database before proceeding
+
     setState(() {
       _isValidatingLSCode = true;
       _lsCodeError = null;
@@ -257,13 +257,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _isValidatingLSCode = false;
             _lsCodeError = 'Invalid Loading Station Code. Please check the code and try again.';
           });
-          // Trigger form validation to show the error in the field
+
           _formKey.currentState?.validate();
         }
         return;
       }
 
-      // Validate required fields (plate number is required)
+
       if (_plateNumberController.text.trim().isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -279,10 +279,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      // License card upload is NOT required during registration
-      // It will be required in the document upload screen after registration
 
-      // LSCODE is valid, proceed with registration
+
+
+
       if (!mounted) return;
       
       setState(() {
@@ -292,7 +292,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      // Validate birthdate is provided and user is 18+
+
       if (_selectedBirthdate == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -323,13 +323,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
       
-      // Sign up user (without license card URL - will be uploaded in document upload screen)
-      // Get phone number without dashes for saving
+
+
       final phoneNumber = _phoneController.text.trim().isEmpty 
           ? null 
           : _getPhoneNumberWithoutDashes();
       
-      // Build full name from parts if available, otherwise use full name field
+
       String fullName = _fullNameController.text.trim();
       if (_firstnameController.text.trim().isNotEmpty && 
           _lastnameController.text.trim().isNotEmpty) {
@@ -342,9 +342,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName = parts.join(' ');
       }
       
-      // Determine coordinates/address:
-      // - If user selected a suggestion, use its lat/lng and label
-      // - Else, capture device location and reverse-geocode
+
+
+
       double? latitude = _selectedLatitude;
       double? longitude = _selectedLongitude;
       String? formattedAddress = _addressController.text.trim().isEmpty
@@ -361,7 +361,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             position.longitude,
           );
         } catch (_) {
-          // keep whatever the user typed
+
         }
       }
 
@@ -371,7 +371,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName: fullName,
         phone: phoneNumber,
         plateNumber: _plateNumberController.text.trim(),
-        vehicleType: _vehicleType, // Fixed to Motorcycle for now
+        vehicleType: _vehicleType, 
         lastname: _lastnameController.text.trim().isEmpty 
             ? null 
             : _lastnameController.text.trim(),
@@ -389,7 +389,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (success && mounted) {
-        // Link rider to loading station
+
         try {
           await registrationService.linkRiderToLoadingStation(
             authProvider.user!.id,
@@ -397,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           );
           
           if (mounted) {
-            // Navigate to document upload screen after successful registration
+
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (_) => const RiderDocumentUploadScreen(),
@@ -428,7 +428,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           _isValidatingLSCode = false;
           _lsCodeError = 'Failed to validate Loading Station Code. Please check your connection and try again.';
         });
-        // Trigger form validation to show the error
+
         _formKey.currentState?.validate();
       }
     }
@@ -462,7 +462,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                 ),
                 const SizedBox(height: 24),
-                // Personal Information Section
+
                 Text(
                   'Personal Information',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -470,7 +470,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                 ),
                 const SizedBox(height: 16),
-                // Lastname
+
                 TextFormField(
                   controller: _lastnameController,
                   textCapitalization: TextCapitalization.words,
@@ -487,7 +487,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                // Firstname
+
                 TextFormField(
                   controller: _firstnameController,
                   textCapitalization: TextCapitalization.words,
@@ -504,7 +504,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                // Middle Initial
+
                 TextFormField(
                   controller: _middleInitialController,
                   textCapitalization: TextCapitalization.characters,
@@ -517,7 +517,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Birthdate (Age must be 18+)
+
                 InkWell(
                   onTap: _selectBirthdate,
                   child: InputDecorator(
@@ -551,7 +551,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                 const SizedBox(height: 16),
-                // Address
+
                 TextFormField(
                   controller: _addressController,
                   textCapitalization: TextCapitalization.sentences,
@@ -581,7 +581,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return null;
                   },
                 ),
-                // Suggestions list below Address
+
                 if (_addressFocusNode.hasFocus && _addressSuggestions.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Card(
@@ -613,7 +613,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                // Full Name (Optional - can be auto-generated from firstname, MI, lastname)
+
                 TextFormField(
                   controller: _fullNameController,
                   decoration: const InputDecoration(
@@ -624,7 +624,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Contact Information Section
+
                 Text(
                   'Contact Information',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -657,7 +657,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _phoneController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [
-                    PhoneNumberFormatter(), // Custom formatter: displays as 0912-345-6789
+                    PhoneNumberFormatter(), 
                   ],
                   decoration: const InputDecoration(
                     labelText: 'Phone (Optional)',
@@ -666,15 +666,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     helperText: 'Format: 0912-345-6789 (11 digits)',
                   ),
                   validator: (value) {
-                    // Phone is optional, so empty is valid
+
                     if (value == null || value.isEmpty) {
                       return null;
                     }
                     
-                    // Get digits only (without dashes)
+
                     final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
                     
-                    // Check if it's exactly 11 digits
+
                     if (digitsOnly.length != 11) {
                       return 'Phone number must be exactly 11 digits';
                     }
@@ -744,7 +744,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return null;
                   },
                 ),
-                // Plate Number
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _plateNumberController,
@@ -762,9 +762,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return null;
                   },
                 ),
-                // LSCODE is required for rider registration
-                // Note: Vehicle type is fixed to Motorcycle (two wheels) for now
-                // Note: License card upload will be done after registration in a separate screen
+
+
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _codeController,
@@ -773,7 +773,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     labelText: 'Loading Station Code (LSCODE)',
                     prefixIcon: const Icon(Icons.qr_code),
                     border: const OutlineInputBorder(),
-                    // Show helper text only when there's no error
+
                     helperText: _lsCodeError == null
                         ? 'Enter the Loading Station Code provided by your Loading Station'
                         : null,
@@ -783,7 +783,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       fontSize: 12,
                       height: 1.4,
                     ),
-                    // Error text with proper styling
+
                     errorText: _lsCodeError,
                     errorStyle: TextStyle(
                       color: AppColors.error,
@@ -804,7 +804,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         : null,
                   ),
                   onChanged: (value) {
-                    // Clear error when user starts typing
+
                     if (_lsCodeError != null) {
                       setState(() {
                         _lsCodeError = null;
@@ -820,11 +820,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter the Loading Station Code';
                     }
-                    // Return the validation error if it exists
+
                     return _lsCodeError;
                   },
                 ),
-                // Show validation status below the field
+
                 if (_isValidatingLSCode)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0, left: 4.0),

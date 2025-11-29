@@ -28,12 +28,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
-      // Prevent multiple simultaneous login attempts
+
       if (authProvider.isLoading) {
         return;
       }
       
-      // Clear any previous errors
+
       authProvider.clearError();
       
       final success = await authProvider.signIn(
@@ -42,11 +42,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success && mounted) {
-        // Navigation is handled by AuthWrapper
-        // Small delay to ensure state is updated
+
+
         await Future.delayed(const Duration(milliseconds: 100));
       } else if (mounted) {
-        // Show error message
+
         final errorMessage = authProvider.error ?? 'Login failed. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -9,15 +9,15 @@ import '../../core/services/registration_service.dart';
 import '../auth/auth_wrapper.dart';
 import '../auth/login_screen.dart';
 
-/// Screen for riders to upload all required documents after registration
-/// Required uploads:
-/// 1. 2x2 Picture
-/// 2. Driver's License
-/// 3. Official Receipt (OR)
-/// 4. Certificate of Registration (CR)
-/// 5. Vehicle Front Picture
-/// 6. Vehicle Side Picture
-/// 7. Vehicle Back Picture
+
+
+
+
+
+
+
+
+
 class RiderDocumentUploadScreen extends StatefulWidget {
   const RiderDocumentUploadScreen({super.key});
 
@@ -31,7 +31,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
   final RegistrationService _registrationService = RegistrationService();
   bool _isUploading = false;
 
-  // All required file uploads
+
   File? _profilePicture;
   File? _driversLicense;
   File? _officialReceipt;
@@ -232,7 +232,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
     try {
       final riderId = authProvider.user!.id;
 
-      // Upload all documents in sequence
+
       final profilePictureUrl = await _storageService.uploadProfilePicture(
         riderId: riderId,
         imageFile: _profilePicture!,
@@ -272,7 +272,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
         pictureType: 'back',
       );
 
-      // Update rider record with all document URLs
+
       await _registrationService.updateRiderDetails(
         riderId,
         profilePictureUrl: profilePictureUrl,
@@ -286,7 +286,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
 
       if (!mounted) return;
 
-      // Show success message
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
@@ -297,13 +297,13 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
         ),
       );
 
-      // Reload auth provider to refresh user state
+
       await authProvider.loadUser();
 
       if (!mounted) return;
 
-      // After successful submission, sign out and redirect to Login.
-      // Rider must wait for admin approval before being able to sign in.
+
+
       await authProvider.signOut();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -331,7 +331,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Upload Documents'),
-        automaticallyImplyLeading: false, // Prevent back navigation
+        automaticallyImplyLeading: false, 
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -339,7 +339,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+
               Icon(
                 Icons.upload_file,
                 size: 64,
@@ -362,7 +362,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
-              // Information Card
+
               Card(
                 color: AppColors.primary.withValues(alpha: 0.1),
                 child: Padding(
@@ -393,7 +393,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              // Personal Documents Section
+
               Text(
                 'Personal Documents',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -401,7 +401,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                     ),
               ),
               const SizedBox(height: 16),
-              // 2x2 Picture
+
               _buildImageUploadSection(
                 title: '2x2 Picture',
                 description: 'Upload a clear 2x2 passport-sized photo',
@@ -420,7 +420,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 },
                 isRequired: true,
               ),
-              // Driver's License
+
               _buildImageUploadSection(
                 title: "Driver's License",
                 description: 'Upload a clear photo of your valid driver\'s license',
@@ -440,7 +440,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 isRequired: true,
               ),
               const SizedBox(height: 24),
-              // Vehicle Documents Section
+
               Text(
                 'Vehicle Documents',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -448,7 +448,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                     ),
               ),
               const SizedBox(height: 16),
-              // Official Receipt
+
               _buildImageUploadSection(
                 title: 'Official Receipt (OR)',
                 description: 'Upload a clear photo of your motor vehicle\'s Official Receipt',
@@ -467,7 +467,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 },
                 isRequired: true,
               ),
-              // Certificate of Registration
+
               _buildImageUploadSection(
                 title: 'Certificate of Registration (CR)',
                 description: 'Upload a clear photo of your motor vehicle\'s Certificate of Registration',
@@ -487,7 +487,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 isRequired: true,
               ),
               const SizedBox(height: 24),
-              // Vehicle Pictures Section
+
               Text(
                 'Vehicle Pictures',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -495,7 +495,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                     ),
               ),
               const SizedBox(height: 16),
-              // Vehicle Front
+
               _buildImageUploadSection(
                 title: 'Vehicle Front Picture',
                 description: 'Upload a clear photo of your vehicle from the front',
@@ -514,7 +514,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 },
                 isRequired: true,
               ),
-              // Vehicle Side
+
               _buildImageUploadSection(
                 title: 'Vehicle Side Picture',
                 description: 'Upload a clear photo of your vehicle from the side',
@@ -533,7 +533,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 },
                 isRequired: true,
               ),
-              // Vehicle Back
+
               _buildImageUploadSection(
                 title: 'Vehicle Back Picture',
                 description: 'Upload a clear photo of your vehicle from the back',
@@ -553,7 +553,7 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
                 isRequired: true,
               ),
               const SizedBox(height: 32),
-              // Submit Button
+
               Consumer<AuthProvider>(
                 builder: (context, authProvider, _) {
                   return ElevatedButton(

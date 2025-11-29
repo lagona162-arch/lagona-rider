@@ -7,9 +7,9 @@ import '../../core/services/rider_service.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/models/rider_model.dart';
 
-/// Screen for picking/updating rider location using Google Maps
-/// Rider can tap on the map to select their location
-/// Coordinates are automatically synced to the database
+
+
+
 class RiderLocationPickerScreen extends StatefulWidget {
   final RiderModel? currentRider;
 
@@ -33,7 +33,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize with current rider location if available
+
     if (widget.currentRider?.latitude != null &&
         widget.currentRider?.longitude != null) {
       _selectedLocation = LatLng(
@@ -65,9 +65,9 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
       );
     }
     
-    // Default to a center location (can be updated to user's current location)
+
     return GoogleMapsService.createCameraPosition(
-      target: const LatLng(14.5995, 120.9842), // Default to Manila, Philippines
+      target: const LatLng(14.5995, 120.9842), 
       zoom: 12.0,
     );
   }
@@ -75,10 +75,10 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
   Future<void> _onMapTap(LatLng position) async {
     setState(() {
       _selectedLocation = position;
-      _selectedAddress = null; // Clear address while fetching new one
+      _selectedAddress = null; 
     });
 
-    // Get address from coordinates
+
     try {
       final address = await _mapsService.getAddressFromCoordinates(
         position.latitude,
@@ -91,11 +91,11 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
         });
       }
     } catch (e) {
-      // Address fetch failed, but location is still selected
+
       debugPrint('Failed to get address: $e');
     }
 
-    // Move camera to selected location
+
     if (_mapController != null) {
       await _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(position, 15.0),
@@ -130,7 +130,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
     });
 
     try {
-      // Update rider location in database
+
       await _riderService.updateRiderLocation(
         authProvider.user!.id,
         _selectedLocation!.latitude,
@@ -147,7 +147,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
         ),
       );
 
-      // Navigate back
+
       Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
@@ -179,7 +179,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
       ),
       body: Stack(
         children: [
-          // Google Map
+
           GoogleMap(
             initialCameraPosition: _initialCameraPosition,
             onMapCreated: (GoogleMapController controller) {
@@ -192,7 +192,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
             mapType: MapType.normal,
             zoomControlsEnabled: true,
           ),
-          // Bottom Sheet with Location Info
+
           Positioned(
             bottom: 0,
             left: 0,
@@ -217,7 +217,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Drag indicator
+
                   Center(
                     child: Container(
                       width: 40,

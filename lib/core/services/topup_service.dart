@@ -1,13 +1,13 @@
 import '../models/topup_model.dart';
 import 'supabase_service.dart';
 
-/// Top-up service for riders
-/// Handles top-up requests from riders to their Loading Station
+
+
 class TopUpService {
   final _supabase = SupabaseService.instance;
 
-  /// Create a top-up request for a rider
-  /// The top-up will be pending approval from the Loading Station
+
+
   Future<TopUpModel> createTopUp({
     required String initiatedBy,
     required String? loadingStationId,
@@ -26,8 +26,8 @@ class TopUpService {
         'total_credited': totalCredited ?? (amount + (bonusAmount ?? 0)),
       }).select().single();
 
-      // Note: Balance update should be handled by the Loading Station after approval
-      // This creates a top-up request that needs to be approved
+
+
 
       return TopUpModel.fromJson(response);
     } catch (e) {
@@ -35,7 +35,7 @@ class TopUpService {
     }
   }
 
-  /// Get top-up requests for a rider
+
   Future<List<TopUpModel>> getTopUps({
     required String riderId,
   }) async {

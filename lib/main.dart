@@ -10,10 +10,17 @@ import 'screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Load environment variables from .env file
-  await dotenv.load(fileName: '.env');
+
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+
+
+    print('Warning: Could not load .env file: $e');
+    rethrow;
+  }
   
-  // Initialize Supabase
+
   await SupabaseService.initialize();
   
   runApp(const MyApp());

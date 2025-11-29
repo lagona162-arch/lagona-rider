@@ -1,17 +1,17 @@
 import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-/// Service for Google Maps integration
-/// Handles map interactions and location synchronization
+
+
 class GoogleMapsService {
-  /// Get coordinates from a map tap/selection
-  /// Returns a LatLng object with the selected location
+
+
   static LatLng getCoordinatesFromTap(LatLng position) {
     return position;
   }
 
-  /// Get address from coordinates using reverse geocoding
-  /// This syncs with Google Maps Geocoding API via geocoding package
+
+
   Future<String?> getAddressFromCoordinates(
     double latitude,
     double longitude,
@@ -22,7 +22,7 @@ class GoogleMapsService {
       if (placemarks.isNotEmpty) {
         final placemark = placemarks.first;
         
-        // Build address string
+
         final addressParts = <String>[];
         
         if (placemark.street != null && placemark.street!.isNotEmpty) {
@@ -53,8 +53,8 @@ class GoogleMapsService {
     }
   }
 
-  /// Get coordinates from an address using forward geocoding
-  /// This syncs with Google Maps Geocoding API
+
+
   Future<LatLng?> getCoordinatesFromAddress(String address) async {
     try {
       final locations = await locationFromAddress(address);
@@ -70,7 +70,7 @@ class GoogleMapsService {
     }
   }
 
-  /// Create a marker for a specific location
+
   static Marker createMarker({
     required String markerId,
     required LatLng position,
@@ -89,7 +89,7 @@ class GoogleMapsService {
     );
   }
 
-  /// Create camera position for a specific location
+
   static CameraPosition createCameraPosition({
     required LatLng target,
     double zoom = 14.0,

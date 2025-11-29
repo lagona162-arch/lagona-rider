@@ -28,43 +28,48 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
   bool _isRefreshing = false;
   String? _error;
   Timer? _refreshTimer;
+  Timer? _assignmentCheckTimer;
   RiderModel? _rider;
   bool _isScreenVisible = true;
   bool _hasActiveDelivery = false;
   RealtimeChannel? _deliveriesChannel;
   
-  // Constants for delivery detection
-  static const double _detectionRadiusKm = 5.0; // 5km radius
-  static const Duration _refreshInterval = Duration(seconds: 3); // Refresh every 3 seconds for faster response
+
+  static const double _detectionRadiusKm = 5.0; 
+  static const Duration _refreshInterval = Duration(seconds: 5);
+  static const Duration _assignmentCheckInterval = Duration(seconds: 3); 
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadDeliveries();
+    _setupRealtimeSubscription();
+    _startAssignmentCheckTimer();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _assignmentCheckTimer?.cancel();
     _deliveriesChannel?.unsubscribe();
     super.dispose();
   }
 
-  /// Setup Supabase Realtime subscription for instant delivery updates
+
   void _setupRealtimeSubscription() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user == null) return;
 
     final supabase = SupabaseService.instance;
     
-    // Unsubscribe from any existing channel
     _deliveriesChannel?.unsubscribe();
     
-    // Subscribe to deliveries table changes
+    final currentUserId = authProvider.user!.id;
+    
     _deliveriesChannel = supabase
-        .channel('deliveries_changes_${authProvider.user!.id}')
+        .channel('deliveries_changes_${currentUserId}')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -75,7 +80,6 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
             value: AppConstants.deliveryStatusPending,
           ),
           callback: (payload) {
-            // New pending delivery inserted - refresh immediately
             if (mounted && _isScreenVisible && !_hasActiveDelivery) {
               _refreshDeliveries();
             }
@@ -86,9 +90,34 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           schema: 'public',
           table: 'deliveries',
           callback: (payload) {
-            // Delivery updated (e.g., assigned to rider, status changed) - refresh
-            if (mounted && _isScreenVisible) {
-              _refreshDeliveries();
+            try {
+              final newRecord = payload.newRecord;
+              final oldRecord = payload.oldRecord;
+              
+              if (newRecord == null) return;
+              
+              final newRiderId = newRecord['rider_id'] as String?;
+              final oldRiderId = oldRecord?['rider_id'] as String?;
+              
+              final wasAssignedToMe = oldRiderId == currentUserId;
+              final isNowAssignedToMe = newRiderId == currentUserId;
+              
+              if (mounted && _isScreenVisible) {
+                if (isNowAssignedToMe && !wasAssignedToMe) {
+                  _loadDeliveries();
+                } else if (wasAssignedToMe || isNowAssignedToMe) {
+                  _loadDeliveries();
+                } else {
+                  final status = newRecord['status'] as String?;
+                  if (status == AppConstants.deliveryStatusPending && !_hasActiveDelivery) {
+                    _refreshDeliveries();
+                  }
+                }
+              }
+            } catch (e) {
+              if (mounted && _isScreenVisible) {
+                _refreshDeliveries();
+              }
             }
           },
         )
@@ -98,30 +127,46 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Pause refresh when app goes to background, resume when in foreground
+
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _isScreenVisible = false;
       _stopRefreshTimer();
+      _stopAssignmentCheckTimer();
     } else if (state == AppLifecycleState.resumed) {
       _isScreenVisible = true;
-      // Re-check rider status and restart timer if needed
       _checkRiderStatus();
+      _loadDeliveries();
+      _startAssignmentCheckTimer();
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload deliveries when screen becomes visible again
-    // This ensures we get the latest rider status
+
     if (_isScreenVisible) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _checkRiderStatus();
+        _refreshDeliveries();
       });
     }
   }
 
-  /// Check rider status and update timer accordingly
+  void _refreshOnTabSwitch() {
+    if (mounted && _isScreenVisible) {
+      _refreshDeliveries();
+    }
+  }
+
+  @override
+  void didUpdateWidget(RiderDeliveriesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (mounted && _isScreenVisible) {
+      _refreshDeliveries();
+    }
+  }
+
+
   Future<void> _checkRiderStatus() async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -129,7 +174,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
 
       final rider = await _riderService.getRider(authProvider.user!.id);
       
-      // Check if rider has an active delivery
+
       final hasActiveDelivery = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
       
       if (mounted) {
@@ -141,44 +186,44 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           _hasActiveDelivery = hasActiveDelivery;
         });
         
-        // Stop timer if rider has an active delivery (regardless of status)
+
         if (hasActiveDelivery) {
           _stopRefreshTimer();
           return;
         }
         
-        // If status changed from available to offline, stop timer
+
         if (wasAvailable && !isNowAvailable) {
           _stopRefreshTimer();
         } else if (!wasAvailable && isNowAvailable) {
-          // If status changed from offline to available, start timer and reload
+
           _loadDeliveries();
         } else if (isNowAvailable && !hasActiveDelivery) {
-          // If already available and no active delivery, restart timer to ensure it's running
+
           _startRefreshTimer();
         }
       }
     } catch (e) {
-      // Silently handle errors
+
     }
   }
 
-  /// Start periodic refresh timer (only when rider is available, has no active delivery, and screen is visible)
+
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
     
-    // Check if user is active first
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.user?.isActive != true) {
-      return; // Don't start timer if user is not active
+      return; 
     }
     
-    // Don't start timer if rider has an active delivery
+
     if (_hasActiveDelivery) {
       return;
     }
     
-    // Only start timer if rider is available, has location, no active delivery, and screen is visible
+
     if (_isScreenVisible &&
         !_hasActiveDelivery &&
         _rider?.status == AppConstants.riderStatusAvailable &&
@@ -190,7 +235,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           return;
         }
         
-        // Check again if rider has active delivery before refreshing
+
         if (authProvider.user != null) {
           final hasActive = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
           if (hasActive) {
@@ -213,18 +258,83 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
     }
   }
 
-  /// Stop refresh timer
+
   void _stopRefreshTimer() {
     _refreshTimer?.cancel();
   }
 
-  /// Refresh deliveries (periodic refresh with indicator)
+  void _startAssignmentCheckTimer() {
+    _assignmentCheckTimer?.cancel();
+    
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.user?.isActive != true) {
+      return;
+    }
+    
+    _assignmentCheckTimer = Timer.periodic(_assignmentCheckInterval, (timer) async {
+      if (!mounted || !_isScreenVisible) {
+        timer.cancel();
+        return;
+      }
+      
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) {
+        timer.cancel();
+        return;
+      }
+      
+      try {
+        final hasActive = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
+        if (hasActive && !_hasActiveDelivery) {
+          if (mounted) {
+            setState(() {
+              _hasActiveDelivery = true;
+            });
+          }
+          _loadDeliveries();
+        } else if (!hasActive && _hasActiveDelivery) {
+          if (mounted) {
+            setState(() {
+              _hasActiveDelivery = false;
+            });
+          }
+          _loadDeliveries();
+        }
+      } catch (e) {
+      }
+    });
+  }
+
+  void _stopAssignmentCheckTimer() {
+    _assignmentCheckTimer?.cancel();
+  }
+
+
   Future<void> _refreshDeliveries() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
-    // Don't refresh if user is not active
     if (authProvider.user?.isActive != true) {
       return;
+    }
+    
+    final hasActiveDelivery = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
+    if (hasActiveDelivery) {
+      if (!_hasActiveDelivery) {
+        _stopRefreshTimer();
+        if (mounted) {
+          setState(() {
+            _hasActiveDelivery = true;
+          });
+        }
+        _loadDeliveries();
+        return;
+      }
+    } else if (_hasActiveDelivery) {
+      if (mounted) {
+        setState(() {
+          _hasActiveDelivery = false;
+        });
+      }
     }
     
     if (_rider == null || _rider!.status != AppConstants.riderStatusAvailable) {
@@ -233,19 +343,6 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
 
     if (_rider!.latitude == null || _rider!.longitude == null) {
       return;
-    }
-
-    // Check if rider has an active delivery BEFORE starting refresh
-    final hasActiveDelivery = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
-    if (hasActiveDelivery) {
-      // Stop timer if active delivery detected
-      _stopRefreshTimer();
-      if (mounted) {
-        setState(() {
-          _hasActiveDelivery = true;
-        });
-      }
-      return; // Don't refresh if there's an active delivery
     }
 
     setState(() {
@@ -260,12 +357,12 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         return;
       }
 
-      // Get deliveries assigned to this rider
+
       final assignedDeliveries = await _deliveryService.getDeliveries(
         riderId: authProvider.user!.id,
       );
       
-      // Double-check active delivery status (in case it changed during refresh)
+
       final currentHasActiveDelivery = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
       
       if (mounted) {
@@ -274,8 +371,8 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         });
       }
       
-      // Get available deliveries within 5km radius
-      // BUT only if they don't have an active delivery
+
+
       List<DeliveryModel> nearbyDeliveries = [];
       if (!currentHasActiveDelivery) {
         nearbyDeliveries = await _deliveryService.getDeliveriesWithinRadius(
@@ -286,16 +383,16 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           status: AppConstants.deliveryStatusPending,
         );
       } else {
-        // If active delivery detected during refresh, stop timer
+
         _stopRefreshTimer();
       }
       
-      // Filter to only show unassigned deliveries
+
       final unassignedDeliveries = nearbyDeliveries
           .where((delivery) => delivery.riderId == null)
           .toList();
       
-      // Combine: assigned deliveries + nearby available deliveries (if no active delivery)
+
       final filteredDeliveries = [
         ...assignedDeliveries,
         ...unassignedDeliveries,
@@ -323,7 +420,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
     });
 
     try {
-      // Get current rider ID from auth provider
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user == null) {
         setState(() {
@@ -333,21 +430,21 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         return;
       }
 
-      // Check if user is active before loading deliveries
+
       if (authProvider.user?.isActive != true) {
         if (!mounted) return;
         
         setState(() {
           _isLoading = false;
-          _deliveries = []; // Empty list for inactive users
+          _deliveries = []; 
         });
         
-        // Stop any running timer
+
         _stopRefreshTimer();
         return;
       }
       
-      // Get rider info
+
       final rider = await _riderService.getRider(authProvider.user!.id);
       
       if (!mounted) return;
@@ -356,13 +453,13 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         _rider = rider;
       });
       
-      // Get deliveries for this rider
-      // First, get deliveries assigned to this rider
+
+
       final assignedDeliveries = await _deliveryService.getDeliveries(
         riderId: authProvider.user!.id,
       );
       
-      // Check if rider already has an active delivery
+
       final hasActiveDelivery = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
       
       if (!mounted) return;
@@ -371,8 +468,8 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         _hasActiveDelivery = hasActiveDelivery;
       });
       
-      // If rider is available and has location, get nearby deliveries within 5km radius
-      // BUT only if they don't have an active delivery
+
+
       List<DeliveryModel> nearbyDeliveries = [];
       if (!hasActiveDelivery &&
           rider.status == AppConstants.riderStatusAvailable &&
@@ -386,22 +483,22 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           status: AppConstants.deliveryStatusPending,
         );
       } else if (!hasActiveDelivery) {
-        // If rider is offline or no location, get all available deliveries from loading station
-        // BUT only if they don't have an active delivery
+
+
         final availableDeliveries = await _deliveryService.getDeliveries(
           status: AppConstants.deliveryStatusPending,
           loadingStationId: rider.loadingStationId,
         );
         nearbyDeliveries = availableDeliveries;
       }
-      // If hasActiveDelivery is true, nearbyDeliveries stays empty (rider can't accept new deliveries)
+
       
-      // Filter to only show unassigned deliveries
+
       final unassignedDeliveries = nearbyDeliveries
           .where((delivery) => delivery.riderId == null)
           .toList();
       
-      // Combine: assigned deliveries + available deliveries (if no active delivery)
+
       final filteredDeliveries = [
         ...assignedDeliveries,
         ...unassignedDeliveries,
@@ -413,14 +510,13 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
           _isLoading = false;
         });
         
-        // Setup realtime subscription after rider data is loaded
+
         _setupRealtimeSubscription();
-        
-        // Start periodic refresh if rider is available and has no active delivery
+        _startAssignmentCheckTimer();
+
         if (!hasActiveDelivery) {
           _startRefreshTimer();
         } else {
-          // Stop timer if rider has active delivery
           _stopRefreshTimer();
         }
       }
@@ -500,7 +596,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                       ? _buildPendingApprovalMessage()
                       : Column(
                   children: [
-                    // Delivery Detection Indicator
+
                     if (isDetecting)
                       Container(
                         width: double.infinity,
@@ -559,7 +655,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                           ],
                         ),
                       ),
-                    // Active Delivery Warning Banner
+
                     if (_hasActiveDelivery)
                       Container(
                         width: double.infinity,
@@ -597,7 +693,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                           ],
                         ),
                       ),
-                    // Deliveries List
+
                     Expanded(
                       child: _deliveries.isEmpty
                           ? Center(
@@ -723,14 +819,17 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                                             ),
                                         ],
                                       ),
-                                      onTap: () {
-                                        Navigator.of(context).push(
+                                      onTap: () async {
+                                        final result = await Navigator.of(context).push(
                                           MaterialPageRoute(
                                             builder: (_) => DeliveryDetailScreen(
                                               deliveryId: delivery.id,
                                             ),
                                           ),
                                         );
+                                        if (mounted && _isScreenVisible) {
+                                          _loadDeliveries();
+                                        }
                                       },
                                     ),
                                   );

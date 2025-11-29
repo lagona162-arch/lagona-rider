@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/services/rider_service.dart';
 import '../../core/services/location_service.dart';
+import '../../core/services/notification_service.dart';
 import '../auth/login_screen.dart';
 import 'rider_deliveries_screen.dart';
 import 'rider_profile_screen.dart';
+import 'rider_notifications_screen.dart';
 
 class RiderHomeScreen extends StatefulWidget {
   const RiderHomeScreen({super.key});
@@ -18,12 +20,16 @@ class RiderHomeScreen extends StatefulWidget {
 class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   Timer? _locationUpdateTimer;
+  Timer? _notificationCheckTimer;
   final RiderService _riderService = RiderService();
   final LocationService _locationService = LocationService();
+  final NotificationService _notificationService = NotificationService();
   bool _isAppInForeground = true;
+  int _unreadNotificationCount = 0;
 
   final List<Widget> _screens = [
     const RiderDeliveriesScreen(),
+    const RiderNotificationsScreen(),
     const RiderProfileScreen(),
   ];
 
@@ -32,12 +38,14 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startLocationUpdates();
+    _startNotificationCheck();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopLocationUpdates();
+    _stopNotificationCheck();
     super.dispose();
   }
 
@@ -47,6 +55,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
     if (state == AppLifecycleState.resumed) {
       _isAppInForeground = true;
       _startLocationUpdates();
+      _checkNotificationCount();
     } else if (state == AppLifecycleState.paused || 
                state == AppLifecycleState.inactive ||
                state == AppLifecycleState.detached) {
@@ -55,27 +64,27 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
     }
   }
 
-  /// Start periodic location updates (every 7.5 seconds - middle of 5-10 range)
+
   void _startLocationUpdates() {
-    _stopLocationUpdates(); // Stop any existing timer
+    _stopLocationUpdates(); 
     
-    // Update immediately on start
+
     _updateRiderLocation();
     
-    // Then update every 7.5 seconds (middle of 5-10 second range)
+
     _locationUpdateTimer = Timer.periodic(
       const Duration(milliseconds: 7500),
       (_) => _updateRiderLocation(),
     );
   }
 
-  /// Stop location updates
+
   void _stopLocationUpdates() {
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = null;
   }
 
-  /// Update rider's location in the database
+
   Future<void> _updateRiderLocation() async {
     if (!_isAppInForeground || !mounted) return;
     
@@ -83,13 +92,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user == null) return;
 
-      // Check if user is active
+
       if (authProvider.user?.isActive != true) return;
 
-      // Get current location
+
       final position = await _locationService.getCurrentPosition();
       
-      // Get address from coordinates (optional, but helpful)
+
       String? address;
       try {
         address = await _locationService.getAddressFromCoordinates(
@@ -97,10 +106,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
           position.longitude,
         );
       } catch (_) {
-        // If reverse geocoding fails, continue without address
+
       }
 
-      // Update rider location in database
+
       await _riderService.updateRiderLocation(
         authProvider.user!.id,
         position.latitude,
@@ -108,8 +117,39 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
         address,
       );
     } catch (e) {
-      // Silently handle errors (permission denied, location unavailable, etc.)
-      // Don't spam the user with errors for background location updates
+
+
+    }
+  }
+
+  void _startNotificationCheck() {
+    _stopNotificationCheck();
+    _checkNotificationCount();
+    _notificationCheckTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _checkNotificationCount(),
+    );
+  }
+
+  void _stopNotificationCheck() {
+    _notificationCheckTimer?.cancel();
+    _notificationCheckTimer = null;
+  }
+
+  Future<void> _checkNotificationCount() async {
+    if (!_isAppInForeground || !mounted) return;
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.user == null) return;
+
+      final count = await _notificationService.getUnreadCount(authProvider.user!.id);
+      if (mounted) {
+        setState(() {
+          _unreadNotificationCount = count;
+        });
+      }
+    } catch (e) {
     }
   }
 
@@ -141,13 +181,49 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
           setState(() {
             _currentIndex = index;
           });
+          if (index == 1) {
+            _checkNotificationCount();
+          }
         },
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.local_shipping),
             label: 'Deliveries',
           ),
           BottomNavigationBarItem(
+            icon: Stack(
+              children: [
+                const Icon(Icons.notifications),
+                if (_unreadNotificationCount > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        _unreadNotificationCount > 9 ? '9+' : '$_unreadNotificationCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            label: 'Notifications',
+          ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: 'Profile',
           ),

@@ -30,8 +30,8 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
-    // Determine active status: prefer access_status == 'approved' if present,
-    // otherwise fallback to legacy is_active boolean.
+
+
     final dynamic accessStatus = json['access_status'];
     final bool resolvedIsActive = accessStatus is String
         ? accessStatus.toLowerCase() == 'approved'
@@ -67,7 +67,7 @@ class UserModel {
       'lastname': lastname,
       'firstname': firstname,
       'middle_initial': middleInitial,
-      'birthdate': birthdate?.toIso8601String().split('T')[0], // Store as date only (YYYY-MM-DD)
+      'birthdate': birthdate?.toIso8601String().split('T')[0], 
       'address': address,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
@@ -106,7 +106,7 @@ class UserModel {
     );
   }
 
-  /// Calculate age from birthdate
+
   int? get age {
     if (birthdate == null) return null;
     final today = DateTime.now();
@@ -118,7 +118,7 @@ class UserModel {
     return age;
   }
 
-  /// Check if user is 18 years or older
+
   bool get is18OrOlder {
     final userAge = age;
     return userAge != null && userAge >= 18;

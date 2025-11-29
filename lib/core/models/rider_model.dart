@@ -42,7 +42,7 @@ class RiderModel {
   });
 
   factory RiderModel.fromJson(Map<String, dynamic> json) {
-    // Helper function to sanitize URL fields
+
     String? sanitizeUrl(dynamic value) {
       if (value == null) return null;
       if (value is String) {

@@ -18,6 +18,8 @@ class DeliveryModel {
   final double? commissionLoading;
   final double? commissionHub;
   final String status;
+  final String? pickupPhotoUrl;
+  final String? dropoffPhotoUrl;
   final DateTime createdAt;
 
   DeliveryModel({
@@ -40,6 +42,8 @@ class DeliveryModel {
     this.commissionLoading,
     this.commissionHub,
     required this.status,
+    this.pickupPhotoUrl,
+    this.dropoffPhotoUrl,
     required this.createdAt,
   });
 
@@ -64,6 +68,8 @@ class DeliveryModel {
       commissionLoading: (json['commission_loading'] as num?)?.toDouble(),
       commissionHub: (json['commission_hub'] as num?)?.toDouble(),
       status: json['status'] as String? ?? 'pending',
+      pickupPhotoUrl: json['pickup_photo_url'] as String?,
+      dropoffPhotoUrl: json['dropoff_photo_url'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -89,6 +95,8 @@ class DeliveryModel {
       'commission_loading': commissionLoading,
       'commission_hub': commissionHub,
       'status': status,
+      'pickup_photo_url': pickupPhotoUrl,
+      'dropoff_photo_url': dropoffPhotoUrl,
       'created_at': createdAt.toIso8601String(),
     };
   }

@@ -31,10 +31,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload user if authenticated but user data is missing
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.isAuthenticated && authProvider.user == null) {
-      // Try to reload user data
+
       authProvider.loadUser();
     }
   }
@@ -53,8 +53,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
 
-    // Only check location permission for authenticated users
-    // Document upload is only part of registration flow, not login flow
+
+
     await _checkLocationPermission();
   }
 
@@ -62,22 +62,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (!mounted) return;
 
     try {
-      // Check permission status - this should be quick
+
       final status = await _locationService.checkPermissionStatus();
       
       if (!mounted) return;
       
-      // Update state immediately - this triggers a rebuild
+
       final wasGranted = status == LocationPermissionStatus.granted;
       
-      // Use setState to update - this will trigger build method
-      // The build method will show RiderHomeScreen if wasGranted is true
+
+
       setState(() {
         _hasLocationPermission = wasGranted;
         _isCheckingLocation = false;
       });
     } catch (e) {
-      // If there's an error, assume permission is not granted
+
       if (mounted) {
         setState(() {
           _hasLocationPermission = false;
@@ -91,7 +91,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
-        // Show loading only while checking location permission initially
+
         if (_isCheckingLocation) {
           return const Scaffold(
             body: Center(
@@ -101,39 +101,39 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (authProvider.isAuthenticated && authProvider.user != null) {
-          // This is a rider-only app, so only show rider home screen
+
           final role = authProvider.user!.role;
           
           if (role == AppConstants.roleRider) {
-            // Document upload is only shown during registration, not after login
-            // After login, users go directly to home or location permission screen
+
+
             if (!_hasLocationPermission) {
-              // Show location permission screen
-              // This screen will handle permission request and update state when granted
+
+
               return _LocationPermissionWrapper(
                 onPermissionGranted: () {
-                  // When permission is granted, optimistically update state immediately
-                  // This prevents black screen by triggering immediate rebuild
+
+
                   if (mounted) {
                     setState(() {
                       _hasLocationPermission = true;
                     });
                     
-                    // Then verify the permission in the background
-                    // If verification fails, we'll update state back to false
+
+
                     _checkLocationPermission().then((_) {
-                      // Verification complete - state already updated
-                      // If permission was not actually granted, state will be corrected
+
+
                     });
                   }
                 },
               );
             } else {
-              // Show rider home screen
+
               return const RiderHomeScreen();
             }
           } else {
-            // If user is not a rider, show error or logout
+
             return Scaffold(
               body: Center(
                 child: Column(
@@ -170,7 +170,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-/// Wrapper widget for LocationPermissionScreen that handles navigation
+
 class _LocationPermissionWrapper extends StatefulWidget {
   final VoidCallback onPermissionGranted;
 
@@ -190,7 +190,7 @@ class _LocationPermissionWrapperState extends State<_LocationPermissionWrapper>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Check permission status immediately when screen loads
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPermission();
     });
@@ -205,7 +205,7 @@ class _LocationPermissionWrapperState extends State<_LocationPermissionWrapper>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // When app comes back to foreground (e.g., from settings), check permission
+
     if (state == AppLifecycleState.resumed) {
       _checkPermission();
     }
@@ -218,11 +218,11 @@ class _LocationPermissionWrapperState extends State<_LocationPermissionWrapper>
       final status = await _locationService.checkPermissionStatus();
       
       if (mounted && status == LocationPermissionStatus.granted) {
-        // Permission granted, call callback to update parent state
+
         widget.onPermissionGranted();
       }
     } catch (e) {
-      // Silently handle errors
+
     }
   }
 
@@ -230,8 +230,8 @@ class _LocationPermissionWrapperState extends State<_LocationPermissionWrapper>
   Widget build(BuildContext context) {
     return LocationPermissionScreen(
       onPermissionGranted: () {
-        // When permission is granted, call the parent callback immediately
-        // The callback will optimistically update state, triggering rebuild
+
+
         widget.onPermissionGranted();
       },
     );

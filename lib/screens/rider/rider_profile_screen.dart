@@ -60,7 +60,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload rider data when screen is shown
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRider();
     });
@@ -153,18 +153,18 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                               : AppConstants.riderStatusOffline;
                                           
                                           try {
-                                            // If setting status to available, fetch and update location
+
                                             if (value) {
-                                              // Get current location
+
                                               final position = await _locationService.getCurrentPosition();
                                               
-                                              // Get address from coordinates
+
                                               final address = await _locationService.getAddressFromCoordinates(
                                                 position.latitude,
                                                 position.longitude,
                                               );
                                               
-                                              // Update status with location
+
                                               await _riderService.updateRiderStatus(
                                                 _rider!.id,
                                                 newStatus,
@@ -173,7 +173,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                                 address: address,
                                               );
                                             } else {
-                                              // Just update status without location
+
                                               await _riderService.updateRiderStatus(
                                                 _rider!.id,
                                                 newStatus,
@@ -186,10 +186,10 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                               _isUpdatingStatus = false;
                                             });
                                             
-                                            // Reload rider data
+
                                             _loadRider();
                                             
-                                            // Show success message
+
                                             if (!mounted) return;
                                             ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                               SnackBar(
@@ -208,7 +208,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                               _isUpdatingStatus = false;
                                             });
                                             
-                                            // Show error message
+
                                             if (!mounted) return;
                                             ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                               SnackBar(
@@ -218,11 +218,11 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                               ),
                                             );
                                             
-                                            // Reload to revert UI
+
                                             _loadRider();
                                           }
                                         }
-                                      : null, // Disable switch if not active or no top-up
+                                      : null, 
                                   activeThumbColor: AppColors.success,
                                   inactiveThumbColor: AppColors.textSecondary,
                                 );
@@ -260,7 +260,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                       ),
                                     ],
                                   ),
-                                  // Show approval status message
+
                                   Consumer<AuthProvider>(
                                     builder: (context, authProvider, _) {
                                       final isActive = authProvider.user?.isActive ?? false;
@@ -345,12 +345,15 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => RiderTopUpRequestScreen(),
                           ),
                         );
+                        if (result == true) {
+                          _loadRider();
+                        }
                       },
                       icon: const Icon(Icons.account_balance_wallet),
                       label: const Text('Request Top-Up'),
@@ -360,7 +363,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Location Update Button - Opens Google Maps
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -372,7 +375,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                             ),
                           ),
                         ).then((_) {
-                          // Reload rider data after location update
+
                           _loadRider();
                         });
                       },
@@ -384,7 +387,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                       ),
                     ),
                   ),
-                  // Show current location if available
+
                   if (_rider?.latitude != null && _rider?.longitude != null) ...[
                     const SizedBox(height: 16),
                     Card(
