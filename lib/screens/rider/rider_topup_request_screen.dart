@@ -24,7 +24,6 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
   bool _isLoadingData = true;
   RiderModel? _rider;
   LoadingStationModel? _loadingStation;
-  static const double _minimumTopUpAmount = 100.0;
 
   @override
   void initState() {
@@ -52,11 +51,12 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
       final rider = await _riderService.getRider(authProvider.user!.id);
       
       if (rider.loadingStationId != null) {
+        final loadingStationId = rider.loadingStationId!;
         final supabase = SupabaseService.instance;
         final lsResponse = await supabase
             .from('loading_stations')
             .select()
-            .eq('id', rider.loadingStationId)
+            .eq('id', loadingStationId)
             .maybeSingle();
         
         LoadingStationModel? loadingStation;
@@ -71,10 +71,7 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
             _isLoadingData = false;
           });
 
-          if (rider.balance <= 0) {
-            final suggestedAmount = _minimumTopUpAmount;
-            _amountController.text = suggestedAmount.toStringAsFixed(0);
-          }
+          // No default amount - user can enter any amount
         }
       } else {
         if (mounted) {
@@ -129,11 +126,10 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
 
         final amount = double.parse(_amountController.text.trim());
 
-        await _topUpService.createTopUp(
-          initiatedBy: authProvider.user!.id,
-          riderId: authProvider.user!.id,
+        await _topUpService.createTopUpRequest(
+          requestedBy: authProvider.user!.id,
           loadingStationId: _rider!.loadingStationId,
-          amount: amount,
+          requestedAmount: amount,
         );
 
         if (mounted) {
@@ -156,9 +152,9 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
         }
       } finally {
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+        setState(() {
+          _isLoading = false;
+        });
         }
       }
     }
@@ -389,11 +385,9 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Amount (₱)',
-                  prefixIcon: const Icon(Icons.attach_money),
+                  prefixIcon: const Icon(Icons.payments),
                   border: const OutlineInputBorder(),
-                  helperText: isInsufficientBalance
-                      ? 'Minimum top-up amount is ₱$_minimumTopUpAmount'
-                      : 'Enter the amount you want to top-up (minimum ₱$_minimumTopUpAmount)',
+                  helperText: 'Enter the amount you want to top-up',
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -402,9 +396,6 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
                   final amount = double.tryParse(value);
                   if (amount == null || amount <= 0) {
                     return 'Please enter a valid amount';
-                  }
-                  if (amount < _minimumTopUpAmount) {
-                    return 'Minimum top-up amount is ₱$_minimumTopUpAmount';
                   }
                   return null;
                 },
@@ -432,7 +423,7 @@ class _RiderTopUpRequestScreenState extends State<RiderTopUpRequestScreen> {
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
-                      ),
+              ),
               ),
               if (!hasLoadingStation) ...[
                 const SizedBox(height: 16),

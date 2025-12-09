@@ -14,9 +14,6 @@ void main() async {
   try {
     await dotenv.load(fileName: '.env');
   } catch (e) {
-
-
-    print('Warning: Could not load .env file: $e');
     rethrow;
   }
   

@@ -142,8 +142,22 @@ class StorageService {
     required File imageFile,
   }) async {
     try {
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist');
+      }
+
+      final fileSize = await imageFile.length();
+      const maxSize = 10 * 1024 * 1024;
+      if (fileSize > maxSize) {
+        throw Exception('Image file is too large. Maximum size is 10MB');
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final extension = imageFile.path.split('.').last;
+      final extension = imageFile.path.split('.').last.toLowerCase();
+
+      if (!['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        throw Exception('Invalid file format. Please use JPG, PNG, or WEBP');
+      }
 
       final fileName = 'license_${riderId}_$timestamp.$extension';
       final filePath = 'rider-licenses/$fileName';
@@ -157,7 +171,28 @@ class StorageService {
           .from('rider-documents')
           .getPublicUrl(filePath);
     } catch (e) {
-      throw Exception('Failed to upload driver license: $e');
+      String errorMessage = 'Failed to upload driver license';
+      
+      if (e.toString().contains('StorageException') || 
+          e.toString().contains('storage')) {
+        if (e.toString().contains('new row violates row-level security') ||
+            e.toString().contains('RLS') ||
+            e.toString().contains('permission denied')) {
+          errorMessage = 'Permission denied. Please ensure your account has upload permissions.';
+        } else if (e.toString().contains('Bucket not found') ||
+                   e.toString().contains('does not exist')) {
+          errorMessage = 'Storage bucket not found. Please contact support.';
+        } else if (e.toString().contains('duplicate') ||
+                   e.toString().contains('already exists')) {
+          errorMessage = 'File already exists. Please try again.';
+        } else {
+          errorMessage = 'Storage error: ${e.toString()}';
+        }
+      } else {
+        errorMessage = '$errorMessage: ${e.toString()}';
+      }
+      
+      throw Exception(errorMessage);
     }
   }
 
@@ -168,8 +203,23 @@ class StorageService {
     required File imageFile,
   }) async {
     try {
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist');
+      }
+
+      final fileSize = await imageFile.length();
+      const maxSize = 10 * 1024 * 1024;
+      if (fileSize > maxSize) {
+        throw Exception('Image file is too large. Maximum size is 10MB');
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final extension = imageFile.path.split('.').last;
+      final extension = imageFile.path.split('.').last.toLowerCase();
+
+      if (!['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        throw Exception('Invalid file format. Please use JPG, PNG, or WEBP');
+      }
+
       final fileName = 'official_receipt_${riderId}_$timestamp.$extension';
       final filePath = 'rider-or/$fileName';
 
@@ -182,7 +232,28 @@ class StorageService {
           .from('rider-documents')
           .getPublicUrl(filePath);
     } catch (e) {
-      throw Exception('Failed to upload official receipt: $e');
+      String errorMessage = 'Failed to upload official receipt';
+      
+      if (e.toString().contains('StorageException') || 
+          e.toString().contains('storage')) {
+        if (e.toString().contains('new row violates row-level security') ||
+            e.toString().contains('RLS') ||
+            e.toString().contains('permission denied')) {
+          errorMessage = 'Permission denied. Please ensure your account has upload permissions.';
+        } else if (e.toString().contains('Bucket not found') ||
+                   e.toString().contains('does not exist')) {
+          errorMessage = 'Storage bucket not found. Please contact support.';
+        } else if (e.toString().contains('duplicate') ||
+                   e.toString().contains('already exists')) {
+          errorMessage = 'File already exists. Please try again.';
+        } else {
+          errorMessage = 'Storage error: ${e.toString()}';
+        }
+      } else {
+        errorMessage = '$errorMessage: ${e.toString()}';
+      }
+      
+      throw Exception(errorMessage);
     }
   }
 
@@ -193,8 +264,23 @@ class StorageService {
     required File imageFile,
   }) async {
     try {
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist');
+      }
+
+      final fileSize = await imageFile.length();
+      const maxSize = 10 * 1024 * 1024;
+      if (fileSize > maxSize) {
+        throw Exception('Image file is too large. Maximum size is 10MB');
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final extension = imageFile.path.split('.').last;
+      final extension = imageFile.path.split('.').last.toLowerCase();
+
+      if (!['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        throw Exception('Invalid file format. Please use JPG, PNG, or WEBP');
+      }
+
       final fileName = 'certificate_registration_${riderId}_$timestamp.$extension';
       final filePath = 'rider-cr/$fileName';
 
@@ -207,7 +293,28 @@ class StorageService {
           .from('rider-documents')
           .getPublicUrl(filePath);
     } catch (e) {
-      throw Exception('Failed to upload certificate of registration: $e');
+      String errorMessage = 'Failed to upload certificate of registration';
+      
+      if (e.toString().contains('StorageException') || 
+          e.toString().contains('storage')) {
+        if (e.toString().contains('new row violates row-level security') ||
+            e.toString().contains('RLS') ||
+            e.toString().contains('permission denied')) {
+          errorMessage = 'Permission denied. Please ensure your account has upload permissions.';
+        } else if (e.toString().contains('Bucket not found') ||
+                   e.toString().contains('does not exist')) {
+          errorMessage = 'Storage bucket not found. Please contact support.';
+        } else if (e.toString().contains('duplicate') ||
+                   e.toString().contains('already exists')) {
+          errorMessage = 'File already exists. Please try again.';
+        } else {
+          errorMessage = 'Storage error: ${e.toString()}';
+        }
+      } else {
+        errorMessage = '$errorMessage: ${e.toString()}';
+      }
+      
+      throw Exception(errorMessage);
     }
   }
 
@@ -219,8 +326,23 @@ class StorageService {
     required String pictureType, 
   }) async {
     try {
+      if (!await imageFile.exists()) {
+        throw Exception('Image file does not exist');
+      }
+
+      final fileSize = await imageFile.length();
+      const maxSize = 10 * 1024 * 1024;
+      if (fileSize > maxSize) {
+        throw Exception('Image file is too large. Maximum size is 10MB');
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final extension = imageFile.path.split('.').last;
+      final extension = imageFile.path.split('.').last.toLowerCase();
+
+      if (!['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        throw Exception('Invalid file format. Please use JPG, PNG, or WEBP');
+      }
+
       final fileName = 'vehicle_${pictureType}_${riderId}_$timestamp.$extension';
       final filePath = 'rider-vehicles/$fileName';
 
@@ -233,7 +355,28 @@ class StorageService {
           .from('rider-documents')
           .getPublicUrl(filePath);
     } catch (e) {
-      throw Exception('Failed to upload vehicle $pictureType picture: $e');
+      String errorMessage = 'Failed to upload vehicle $pictureType picture';
+      
+      if (e.toString().contains('StorageException') || 
+          e.toString().contains('storage')) {
+        if (e.toString().contains('new row violates row-level security') ||
+            e.toString().contains('RLS') ||
+            e.toString().contains('permission denied')) {
+          errorMessage = 'Permission denied. Please ensure your account has upload permissions.';
+        } else if (e.toString().contains('Bucket not found') ||
+                   e.toString().contains('does not exist')) {
+          errorMessage = 'Storage bucket not found. Please contact support.';
+        } else if (e.toString().contains('duplicate') ||
+                   e.toString().contains('already exists')) {
+          errorMessage = 'File already exists. Please try again.';
+        } else {
+          errorMessage = 'Storage error: ${e.toString()}';
+        }
+      } else {
+        errorMessage = '$errorMessage: ${e.toString()}';
+      }
+      
+      throw Exception(errorMessage);
     }
   }
 

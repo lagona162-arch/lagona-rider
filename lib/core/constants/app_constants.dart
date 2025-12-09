@@ -8,8 +8,36 @@ class AppConstants {
   static const String roleCustomer = 'customer';
 
 
-  static const String deliveryTypePabili = 'pabili';
-  static const String deliveryTypePadala = 'padala';
+  // Database uses 'food' and 'parcel', but rider app displays as 'pabili' and 'padala'
+  static const String deliveryTypeFood = 'food';    // Displayed as 'Pabili' in rider app
+  static const String deliveryTypeParcel = 'parcel'; // Displayed as 'Padala' in rider app
+  
+  // Helper methods to convert database types to display labels
+  static String getDeliveryTypeDisplayLabel(String type) {
+    switch (type) {
+      case deliveryTypeFood:
+        return 'Pabili';
+      case deliveryTypeParcel:
+        return 'Padala';
+      default:
+        return type;
+    }
+  }
+  
+  static String getDeliveryTypeDisplayLabelLowercase(String type) {
+    switch (type) {
+      case deliveryTypeFood:
+        return 'pabili';
+      case deliveryTypeParcel:
+        return 'padala';
+      default:
+        return type;
+    }
+  }
+  
+  // Legacy constants for backward compatibility (now point to food/parcel)
+  static const String deliveryTypePabili = deliveryTypeFood;    // Alias for food (display only)
+  static const String deliveryTypePadala = deliveryTypeParcel;   // Alias for parcel (display only)
 
 
   static const String deliveryStatusPending = 'pending';

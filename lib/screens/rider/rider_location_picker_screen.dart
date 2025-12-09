@@ -91,8 +91,7 @@ class _RiderLocationPickerScreenState extends State<RiderLocationPickerScreen> {
         });
       }
     } catch (e) {
-
-      debugPrint('Failed to get address: $e');
+      // Failed to get address, continue without it
     }
 
 

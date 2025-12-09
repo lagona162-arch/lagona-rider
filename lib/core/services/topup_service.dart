@@ -1,4 +1,5 @@
 import '../models/topup_model.dart';
+import '../models/topup_request_model.dart';
 import 'supabase_service.dart';
 
 
@@ -6,8 +7,29 @@ import 'supabase_service.dart';
 class TopUpService {
   final _supabase = SupabaseService.instance;
 
+  /// Creates a top-up request in the topup_requests table
+  /// This is used when riders request top-up from their Loading Station
+  Future<TopUpRequestModel> createTopUpRequest({
+    required String requestedBy,
+    required String? loadingStationId,
+    required double requestedAmount,
+  }) async {
+    try {
+      final response = await _supabase.from('topup_requests').insert({
+        'requested_by': requestedBy,
+        'loading_station_id': loadingStationId,
+        'requested_amount': requestedAmount,
+        'status': 'pending',
+      }).select().single();
 
+      return TopUpRequestModel.fromJson(response as Map<String, dynamic>);
+    } catch (e) {
+      throw Exception('Failed to create top-up request: $e');
+    }
+  }
 
+  /// Creates a completed top-up transaction in the topups table
+  /// This is typically used after a top-up request is approved
   Future<TopUpModel> createTopUp({
     required String initiatedBy,
     required String? loadingStationId,
@@ -26,12 +48,9 @@ class TopUpService {
         'total_credited': totalCredited ?? (amount + (bonusAmount ?? 0)),
       }).select().single();
 
-
-
-
-      return TopUpModel.fromJson(response);
+      return TopUpModel.fromJson(response as Map<String, dynamic>);
     } catch (e) {
-      throw Exception('Failed to create top-up request: $e');
+      throw Exception('Failed to create top-up: $e');
     }
   }
 

@@ -63,11 +63,11 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
     if (authProvider.user == null) return;
 
     final supabase = SupabaseService.instance;
-    
+
     _deliveriesChannel?.unsubscribe();
     
     final currentUserId = authProvider.user!.id;
-    
+
     _deliveriesChannel = supabase
         .channel('deliveries_changes_${currentUserId}')
         .onPostgresChanges(
@@ -115,8 +115,8 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                 }
               }
             } catch (e) {
-              if (mounted && _isScreenVisible) {
-                _refreshDeliveries();
+            if (mounted && _isScreenVisible) {
+              _refreshDeliveries();
               }
             }
           },
@@ -312,7 +312,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
 
   Future<void> _refreshDeliveries() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     if (authProvider.user?.isActive != true) {
       return;
     }
@@ -342,7 +342,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
     }
 
     if (_rider!.latitude == null || _rider!.longitude == null) {
-      return;
+      return; 
     }
 
     setState(() {
@@ -360,6 +360,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
 
       final assignedDeliveries = await _deliveryService.getDeliveries(
         riderId: authProvider.user!.id,
+        filterRiderTypes: true, // Only get pabili and padala types
       );
       
 
@@ -457,6 +458,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
 
       final assignedDeliveries = await _deliveryService.getDeliveries(
         riderId: authProvider.user!.id,
+        filterRiderTypes: true, // Only get pabili and padala types
       );
       
 
@@ -488,6 +490,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
         final availableDeliveries = await _deliveryService.getDeliveries(
           status: AppConstants.deliveryStatusPending,
           loadingStationId: rider.loadingStationId,
+          filterRiderTypes: true, // Only get pabili and padala types
         );
         nearbyDeliveries = availableDeliveries;
       }
@@ -743,7 +746,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                                         : null,
                                     child: ListTile(
                                       leading: Icon(
-                                        delivery.type == AppConstants.deliveryTypePabili
+                                        delivery.type == AppConstants.deliveryTypeFood
                                             ? Icons.shopping_bag
                                             : Icons.local_shipping,
                                         color: isAssigned
@@ -751,9 +754,7 @@ class _RiderDeliveriesScreenState extends State<RiderDeliveriesScreen>
                                             : AppColors.textPrimary,
                                       ),
                                       title: Text(
-                                        delivery.type == AppConstants.deliveryTypePabili
-                                            ? 'Pabili Delivery'
-                                            : 'Padala Delivery',
+                                        '${AppConstants.getDeliveryTypeDisplayLabel(delivery.type)} Delivery',
                                         style: TextStyle(
                                           fontWeight: isAssigned
                                               ? FontWeight.w600

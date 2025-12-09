@@ -102,14 +102,26 @@ class AuthProvider extends ChangeNotifier {
         _error = null; 
         notifyListeners();
       } catch (e) {
-
-        _user = null;
-        _error = e.toString();
-        await signOut(); 
+        // Only sign out if it's an authentication/authorization error
+        // Don't sign out for network errors or temporary issues
+        final errorString = e.toString().toLowerCase();
+        if (errorString.contains('not approved') ||
+            errorString.contains('pending') ||
+            errorString.contains('rejected') ||
+            errorString.contains('suspended') ||
+            errorString.contains('only for riders')) {
+          _user = null;
+          _error = e.toString();
+          await signOut();
+        } else {
+          // For other errors (network, timeout, etc.), keep the session
+          // but show the error
+          _user = null;
+          _error = 'Failed to load user data. Please try again.';
+        }
         notifyListeners();
       }
     } else {
-
       _user = null;
       notifyListeners();
     }

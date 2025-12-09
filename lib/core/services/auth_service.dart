@@ -113,34 +113,31 @@ class AuthService {
       );
 
       if (response.user != null) {
-
         final user = await getUser(response.user!.id).timeout(
           const Duration(seconds: 10),
           onTimeout: () {
-
             _supabase.auth.signOut();
             throw Exception('Failed to load user data. Please try again.');
           },
         );
         
+        if (user == null) {
+          await _supabase.auth.signOut();
+          throw Exception('Failed to load user data. Please try again.');
+        }
 
-        if (user != null && user.role != AppConstants.roleRider) {
-
+        if (user.role != AppConstants.roleRider) {
           await _supabase.auth.signOut();
           throw Exception('This app is only for Riders. Please use the correct app for your role.');
         }
         
 
-        if (user != null && !user.isActive) {
-
-          await _supabase.auth.signOut();
-          
-
+        if (!user.isActive) {
           String errorMessage;
           try {
             final userData = await _supabase
                 .from('users')
-                .select('access_status')
+                .select('access_status, is_active')
                 .eq('id', response.user!.id)
                 .single()
                 .timeout(
@@ -151,6 +148,7 @@ class AuthService {
                 );
             
             final accessStatus = (userData['access_status'] as String?)?.toLowerCase();
+            final isActive = userData['is_active'] as bool? ?? false;
             
             if (accessStatus == AppConstants.accessStatusPending) {
               errorMessage = 'Your account is pending admin approval. Please wait for approval before signing in.';
@@ -161,11 +159,11 @@ class AuthService {
             } else {
               errorMessage = 'Your account is not approved. Please contact support for more information.';
             }
-          } catch (_) {
-
+          } catch (e) {
             errorMessage = 'Your account is not approved. Please contact support for more information.';
           }
           
+          await _supabase.auth.signOut();
           throw Exception(errorMessage);
         }
         
@@ -173,20 +171,19 @@ class AuthService {
       }
       return null;
     } catch (e) {
-
-      try {
-        await _supabase.auth.signOut();
-      } catch (_) {
-
-      }
       
-
+      // Only sign out if it's a specific error that requires it
+      // Don't sign out for general errors to preserve the session
       if (e.toString().contains('Your account') || 
           e.toString().contains('This app is only for Riders') ||
           e.toString().contains('timed out') ||
           e.toString().contains('Failed to load')) {
+        // These errors already signed out, just rethrow
         rethrow;
       }
+      
+      // For other errors, don't sign out - let the session persist
+      // This allows hot restart to work
       throw Exception('Sign in failed: ${e.toString()}');
     }
   }

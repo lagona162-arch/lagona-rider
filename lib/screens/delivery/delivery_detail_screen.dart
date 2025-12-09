@@ -9,15 +9,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/models/delivery_model.dart';
 import '../../core/models/merchant_rider_payment_model.dart';
+import '../../core/models/user_model.dart';
 import '../../core/services/delivery_service.dart';
 import '../../core/services/rider_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/google_maps_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/merchant_rider_payment_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/providers/auth_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_colors.dart';
+import 'delivery_in_transit_screen.dart';
 
 class DeliveryDetailScreen extends StatefulWidget {
   final String deliveryId;
@@ -38,11 +42,15 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   final StorageService _storageService = StorageService();
   final MerchantRiderPaymentService _paymentService = MerchantRiderPaymentService();
   final ImagePicker _imagePicker = ImagePicker();
+  final SupabaseClient _supabase = SupabaseService.instance;
   DeliveryModel? _delivery;
   MerchantRiderPaymentModel? _payment;
+  UserModel? _senderUser;
+  UserModel? _recipientUser;
   bool _isLoading = true;
   bool _isUpdating = false;
   bool _isLoadingPayment = false;
+  bool _isLoadingUserDetails = false;
   GoogleMapController? _mapController;
   Position? _currentPosition;
 
@@ -73,10 +81,11 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
       if (mounted) {
         setState(() {
           _currentPosition = position;
+          // Trigger rebuild to update proximity status for completion button
         });
       }
     } catch (e) {
-
+      // Silently handle location errors
     }
   }
 
@@ -164,6 +173,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         
         if (delivery != null) {
           _loadPayment();
+          _loadSenderAndRecipientDetails();
         }
       }
     } catch (e) {
@@ -204,6 +214,82 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadSenderAndRecipientDetails() async {
+    if (_delivery == null) return;
+    
+    setState(() {
+      _isLoadingUserDetails = true;
+    });
+
+    try {
+      // For Padala deliveries, sender is typically the customer (pickup) and recipient is at dropoff
+      // Load sender (customer) details if available
+      if (_delivery!.customerId != null) {
+        try {
+          final senderResponse = await _supabase
+              .from('users')
+              .select()
+              .eq('id', _delivery!.customerId!)
+              .maybeSingle();
+          
+          if (senderResponse != null) {
+            _senderUser = UserModel.fromJson(senderResponse as Map<String, dynamic>);
+          }
+        } catch (e) {
+          // Ignore errors for sender
+        }
+      }
+
+      // For Padala (parcel), recipient might be stored differently or we might need to check merchant
+      // For now, if there's a merchant, they might be the sender, and customer is recipient
+      if (_delivery!.merchantId != null && _delivery!.type == AppConstants.deliveryTypeParcel) {
+        try {
+          final recipientResponse = await _supabase
+              .from('users')
+              .select()
+              .eq('id', _delivery!.merchantId!)
+              .maybeSingle();
+          
+          if (recipientResponse != null) {
+            _recipientUser = UserModel.fromJson(recipientResponse as Map<String, dynamic>);
+          }
+        } catch (e) {
+          // Ignore errors for recipient
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoadingUserDetails = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingUserDetails = false;
+        });
+      }
+    }
+  }
+
+  bool _isNearDropoffLocation() {
+    if (_currentPosition == null ||
+        _delivery?.dropoffLatitude == null ||
+        _delivery?.dropoffLongitude == null) {
+      return false;
+    }
+
+    final distance = _locationService.calculateDistance(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      _delivery!.dropoffLatitude!,
+      _delivery!.dropoffLongitude!,
+    );
+
+    // Consider "near" if within 100 meters
+    return distance <= 0.1; // 100 meters in kilometers
   }
 
 
@@ -1003,15 +1089,29 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   }
 
   Widget _buildStatusStepper() {
-    final statuses = [
+    // Different status flows based on delivery type
+    final List<String> statuses;
+    final bool isPadala = _delivery!.type == AppConstants.deliveryTypeParcel;
+    
+    if (isPadala) {
+      // Padala (Parcel) flow: picked_up → in_transit → completed
+      statuses = [
+        AppConstants.deliveryStatusPickedUp,
+        AppConstants.deliveryStatusInTransit,
+        AppConstants.deliveryStatusCompleted,
+      ];
+    } else {
+      // Pabili (Food) flow: pending → accepted → prepared → ready → picked_up → in_transit → completed
+      statuses = [
       AppConstants.deliveryStatusPending,
       AppConstants.deliveryStatusAccepted,
-      AppConstants.deliveryStatusPrepared,
-      AppConstants.deliveryStatusReady,
+        AppConstants.deliveryStatusPrepared,
+        AppConstants.deliveryStatusReady,
       AppConstants.deliveryStatusPickedUp,
       AppConstants.deliveryStatusInTransit,
       AppConstants.deliveryStatusCompleted,
     ];
+    }
 
     final currentIndex = statuses.indexOf(_delivery!.status);
     final isValidStatus = currentIndex >= 0;
@@ -1134,6 +1234,192 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     );
   }
 
+  Widget _buildSenderRecipientSection() {
+    if (_delivery!.type != AppConstants.deliveryTypeParcel) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Sender & Recipient Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_isLoadingUserDetails)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else ...[
+              // Sender Information
+              if (_senderUser != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.blue.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.send, color: Colors.blue[700], size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Sender',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[900],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildDetailRow('Name', _senderUser!.fullName),
+                      if (_senderUser!.phone != null)
+                        _buildDetailRow('Phone', _senderUser!.phone!),
+                      if (_senderUser!.email.isNotEmpty)
+                        _buildDetailRow('Email', _senderUser!.email),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              // Recipient Information - Always show for Padala
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.purple.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.person_pin, color: Colors.purple[700], size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Recipient',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple[900],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_isLoadingUserDetails)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else if (_recipientUser != null) ...[
+                      _buildDetailRow('Name', _recipientUser!.fullName),
+                      if (_recipientUser!.phone != null)
+                        _buildDetailRow('Phone', _recipientUser!.phone!),
+                      if (_recipientUser!.email.isNotEmpty)
+                        _buildDetailRow('Email', _recipientUser!.email),
+                    ] else ...[
+                      // Show dropoff address as recipient location
+                      _buildDetailRow('Location', _delivery!.dropoffAddress ?? 'Address not provided'),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Contact recipient upon arrival at dropoff location',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButton({
     required String label,
     required VoidCallback onPressed,
@@ -1182,11 +1468,28 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
 
     String url;
     if (_currentPosition != null) {
-      url = 'https://www.google.com/maps/dir/?api=1&destination=$destinationLat,$destinationLng&destination_place_id=${destinationLabel ?? ''}';
+      // Include origin (rider's current location) to preserve custom pin
+      // Use proper URL encoding for coordinates
+      final origin = '${_currentPosition!.latitude},${_currentPosition!.longitude}';
+      final destination = '$destinationLat,$destinationLng';
+      
+      // Build URL with origin and destination
+      url = 'https://www.google.com/maps/dir/?api=1'
+          '&origin=$origin'
+          '&destination=$destination';
+      
+      // Only add destination_place_id if it's a valid non-empty string
+      if (destinationLabel != null && destinationLabel.trim().isNotEmpty) {
+        // Note: destination_place_id should be a Google Place ID, not an address
+        // If destinationLabel is an address, we'll skip this parameter
+        // to avoid issues with invalid place IDs
+      }
     } else {
+      // If no current position, just search for the destination
       url = 'https://www.google.com/maps/search/?api=1&query=$destinationLat,$destinationLng';
     }
 
+    try {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1195,6 +1498,17 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Could not open navigation'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening navigation: $e'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1387,7 +1701,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
-                                        _delivery!.type == AppConstants.deliveryTypePabili
+                                        _delivery!.type == AppConstants.deliveryTypeFood
                                             ? Icons.shopping_bag
                                             : Icons.local_shipping,
                                         color: AppColors.primary,
@@ -1402,9 +1716,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                     Icon(Icons.category, size: 18, color: Colors.grey[700]),
                                     const SizedBox(width: 8),
                                     Text(
-                                      _delivery!.type == AppConstants.deliveryTypePabili
-                                          ? 'Pabili Delivery'
-                                          : 'Padala Delivery',
+                                      '${AppConstants.getDeliveryTypeDisplayLabel(_delivery!.type)} Delivery',
                                       style: TextStyle(
                                         fontSize: 16,
                                         color: Colors.grey[700],
@@ -1417,7 +1729,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                   const SizedBox(height: 12),
                                   Row(
                                     children: [
-                                      Icon(Icons.attach_money, size: 18, color: Colors.grey[700]),
+                                      Icon(Icons.payments, size: 18, color: Colors.grey[700]),
                                       const SizedBox(width: 8),
                                       Text(
                                         'Delivery Fee: ₱${_delivery!.deliveryFee!.toStringAsFixed(2)}',
@@ -1453,6 +1765,8 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                         ),
                         const SizedBox(height: 16),
 
+                        if (_delivery!.type == AppConstants.deliveryTypePadala)
+                          _buildSenderRecipientSection(),
                         _buildStatusStepper(),
                       const SizedBox(height: 16),
 
@@ -1883,11 +2197,14 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                             );
                                           }
                                           
+                                          // Different accept methods for Pabili vs Padala
+                                          final isPadala = _delivery!.type == AppConstants.deliveryTypeParcel;
+                                          
                                           return _buildActionButton(
-                                            label: 'Accept Delivery',
-                                            onPressed: () => _acceptDelivery(),
+                                            label: isPadala ? 'Accept Padala (with photo)' : 'Accept Delivery',
+                                            onPressed: () => isPadala ? _acceptPadalaDelivery() : _acceptDelivery(),
                                             color: AppColors.statusAccepted,
-                                            icon: Icons.check_circle,
+                                            icon: isPadala ? Icons.photo_camera : Icons.check_circle,
                                             isPrimary: true,
                                           );
                                         },
@@ -1896,7 +2213,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                     if (isAssignedToMe &&
                                         _delivery!.status == AppConstants.deliveryStatusPending)
                                       _buildActionButton(
-                                        label: 'Accept Delivery',
+                                        label: 'Accept Pabili',
                                         onPressed: () => _updateStatus(AppConstants.deliveryStatusAccepted),
                                         color: AppColors.statusAccepted,
                                         icon: Icons.check_circle,
@@ -1986,7 +2303,47 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                     ],
 
                                     if (isAssignedToMe &&
-                                        _delivery!.status == AppConstants.deliveryStatusPickedUp)
+                                        _delivery!.status == AppConstants.deliveryStatusPickedUp) ...[
+                                      // Navigation Mode Button
+                                      Container(
+                                        margin: const EdgeInsets.only(bottom: 12),
+                                        child: ElevatedButton(
+                                          onPressed: () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => DeliveryInTransitScreen(
+                                                  deliveryId: widget.deliveryId,
+                                                ),
+                                              ),
+                                            );
+                                            await _loadDelivery();
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.blue,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 20),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            elevation: 4,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.navigation, size: 28),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                'Open Navigation Mode',
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                       _buildActionButton(
                                         label: 'Start Delivery (In Transit)',
                                         onPressed: () => _updateStatus(AppConstants.deliveryStatusInTransit),
@@ -1994,16 +2351,126 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                         icon: Icons.directions_car,
                                         isPrimary: true,
                                       ),
+                                    ],
 
                                     if (isAssignedToMe &&
-                                        _delivery!.status == AppConstants.deliveryStatusInTransit)
+                                        _delivery!.status == AppConstants.deliveryStatusInTransit) ...[
+                                      // Navigation Mode Button - Primary Action
+                                      Container(
+                                        margin: const EdgeInsets.only(bottom: 12),
+                                        child: ElevatedButton(
+                                          onPressed: () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => DeliveryInTransitScreen(
+                                                  deliveryId: widget.deliveryId,
+                                                ),
+                                              ),
+                                            );
+                                            // Refresh when returning from navigation mode
+                                            await _loadDelivery();
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.orange,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 20),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            elevation: 4,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.navigation, size: 28),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                'Open Navigation Mode',
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      
+                                      // Show proximity status
+                                      if (_currentPosition != null &&
+                                          _delivery!.dropoffLatitude != null &&
+                                          _delivery!.dropoffLongitude != null) ...[
+                                        Container(
+                                          margin: const EdgeInsets.only(bottom: 12),
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: _isNearDropoffLocation()
+                                                ? Colors.green.withOpacity(0.1)
+                                                : Colors.orange.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: _isNearDropoffLocation()
+                                                  ? Colors.green.withOpacity(0.3)
+                                                  : Colors.orange.withOpacity(0.3),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                _isNearDropoffLocation()
+                                                    ? Icons.check_circle
+                                                    : Icons.location_on,
+                                                color: _isNearDropoffLocation()
+                                                    ? Colors.green[700]
+                                                    : Colors.orange[700],
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  _isNearDropoffLocation()
+                                                      ? 'You are at the drop-off location. You can now confirm delivery.'
+                                                      : 'Please proceed to the drop-off location to confirm delivery.',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: _isNearDropoffLocation()
+                                                        ? Colors.green[700]
+                                                        : Colors.orange[700],
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                       _buildActionButton(
-                                        label: 'Complete Delivery (Photo Required)',
-                                        onPressed: _markAsCompleted,
-                                        color: AppColors.statusCompleted,
+                                        label: 'Confirm Delivery at Drop-off (Photo Required)',
+                                        onPressed: _isNearDropoffLocation() || 
+                                                  _delivery!.dropoffLatitude == null ||
+                                                  _delivery!.dropoffLongitude == null
+                                            ? _markAsCompleted
+                                            : () {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: const Text(
+                                                      'Please proceed to the drop-off location to confirm delivery.',
+                                                    ),
+                                                    backgroundColor: Colors.orange,
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              },
+                                        color: _isNearDropoffLocation() || 
+                                               _delivery!.dropoffLatitude == null ||
+                                               _delivery!.dropoffLongitude == null
+                                            ? AppColors.statusCompleted
+                                            : Colors.grey,
                                         icon: Icons.camera_alt,
                                         isPrimary: true,
                                       ),
+                                    ],
 
                                     if (_isUpdating)
                                       Container(
@@ -2115,10 +2582,13 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
                                 ),
                                 const SizedBox(height: 12),
 
+                                // Hide map during active delivery - use navigation mode instead
                                 if (_delivery!.pickupLatitude != null &&
                                     _delivery!.pickupLongitude != null &&
                                     _delivery!.dropoffLatitude != null &&
-                                    _delivery!.dropoffLongitude != null)
+                                    _delivery!.dropoffLongitude != null &&
+                                    _delivery!.status != AppConstants.deliveryStatusPickedUp &&
+                                    _delivery!.status != AppConstants.deliveryStatusInTransit)
                                   Container(
                                     height: 300,
                                     decoration: BoxDecoration(
@@ -2253,6 +2723,126 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
     }
   }
 
+  Future<void> _acceptPadalaDelivery() async {
+    if (_isUpdating) return;
+    
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.user == null) return;
+
+    // Validate delivery type
+    if (_delivery != null && _delivery!.type != AppConstants.deliveryTypeParcel) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This method is only for Padala deliveries'),
+          backgroundColor: AppColors.error,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    if (authProvider.user?.isActive != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your account is pending admin approval'),
+          backgroundColor: AppColors.error,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // Check for active deliveries
+    final hasActive = await _deliveryService.hasActiveDelivery(authProvider.user!.id);
+    if (hasActive) {
+      final activeDelivery = await _deliveryService.getActiveDelivery(authProvider.user!.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You already have an active delivery (${activeDelivery?.id.substring(0, 8).toUpperCase() ?? "Unknown"})'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Capture pickup photo
+    final photoFile = await _showPhotoCaptureDialog('Pickup Photo Required');
+    if (photoFile == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo is required to accept Padala delivery'),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+    });
+
+    try {
+      // Assign rider to delivery
+      await _deliveryService.assignRider(widget.deliveryId, authProvider.user!.id);
+      
+      // Upload pickup photo
+      final photoUrl = await _storageService.uploadDeliveryPhoto(
+        deliveryId: widget.deliveryId,
+        imageFile: photoFile,
+        photoType: 'pickup',
+        riderId: authProvider.user!.id,
+      );
+
+      // Update status to picked_up with pickup photo (Padala flow)
+      await _updateStatus(
+        AppConstants.deliveryStatusPickedUp,
+        pickupPhotoUrl: photoUrl,
+        skipLoadingState: true,
+      );
+
+      // Update rider status to busy
+      final riderService = RiderService();
+      await riderService.updateRiderStatus(
+        authProvider.user!.id,
+        AppConstants.riderStatusBusy,
+      );
+
+      await _loadDelivery();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Padala picked up successfully'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accepting Padala delivery: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
   Future<void> _acceptDelivery() async {
     if (_isUpdating) return;
     
@@ -2266,6 +2856,14 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         throw Exception('User not authenticated');
       }
 
+      // Validate delivery type - riders can only accept food (pabili) or parcel (padala)
+      if (_delivery != null) {
+        if (_delivery!.type != AppConstants.deliveryTypeFood &&
+            _delivery!.type != AppConstants.deliveryTypeParcel) {
+          throw Exception(
+              'Riders can only be assigned to Pabili (food) or Padala (parcel) deliveries. This delivery type is not supported.');
+        }
+      }
 
       if (authProvider.user?.isActive != true) {
         throw Exception(

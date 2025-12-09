@@ -55,6 +55,28 @@ class MerchantRiderPaymentService {
     required String riderId,
   }) async {
     try {
+      // First, fetch the payment to get the amount
+      final paymentResponse = await _supabase
+          .from('merchant_rider_payments')
+          .select()
+          .eq('id', paymentId)
+          .eq('rider_id', riderId)
+          .single();
+
+      if (paymentResponse == null) {
+        throw Exception('Payment not found');
+      }
+
+      final payment = MerchantRiderPaymentModel.fromJson(
+        paymentResponse as Map<String, dynamic>,
+      );
+
+      // Check if payment is already confirmed to avoid double crediting
+      if (payment.isConfirmed) {
+        return payment;
+      }
+
+      // Update payment status
       final response = await _supabase
           .from('merchant_rider_payments')
           .update({
@@ -66,9 +88,28 @@ class MerchantRiderPaymentService {
           .select()
           .single();
 
-      return MerchantRiderPaymentModel.fromJson(
+      final confirmedPayment = MerchantRiderPaymentModel.fromJson(
         response as Map<String, dynamic>,
       );
+
+      // Credit the rider's balance by adding the payment amount
+      final riderResponse = await _supabase
+          .from('riders')
+          .select('balance')
+          .eq('id', riderId)
+          .single();
+
+      final currentBalance = (riderResponse['balance'] as num?)?.toDouble() ?? 0.0;
+      final newBalance = currentBalance + payment.amount;
+
+      await _supabase
+          .from('riders')
+          .update({
+            'balance': newBalance,
+          })
+          .eq('id', riderId);
+
+      return confirmedPayment;
     } catch (e) {
       throw Exception('Failed to confirm payment: $e');
     }

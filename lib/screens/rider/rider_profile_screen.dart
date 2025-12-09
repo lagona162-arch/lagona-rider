@@ -38,6 +38,28 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       if (authProvider.user != null) {
         final rider = await _riderService.getRider(authProvider.user!.id);
+        
+        // Automatically set status to offline if balance is insufficient and status is available
+        const double minimumBalance = 20.0;
+        if (rider.balance < minimumBalance && rider.status == AppConstants.riderStatusAvailable) {
+          try {
+            await _riderService.updateRiderStatus(
+              rider.id,
+              AppConstants.riderStatusOffline,
+            );
+            // Reload rider to get updated status
+            final updatedRider = await _riderService.getRider(authProvider.user!.id);
+            if (!mounted) return;
+            setState(() {
+              _rider = updatedRider;
+              _isLoading = false;
+            });
+            return;
+          } catch (e) {
+            // If update fails, continue with original rider data
+          }
+        }
+        
         if (!mounted) return;
         setState(() {
           _rider = rider;
@@ -136,7 +158,9 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                           : Consumer<AuthProvider>(
                               builder: (context, authProvider, _) {
                                 final isActive = authProvider.user?.isActive ?? false;
-                                final hasSufficientBalance = (_rider?.balance ?? 0) > 0;
+                                const double minimumBalance = 20.0;
+                                final currentBalance = _rider?.balance ?? 0;
+                                final hasSufficientBalance = currentBalance >= minimumBalance;
                                 
                                 return Switch(
                                   value: _rider?.status == AppConstants.riderStatusAvailable,
@@ -234,7 +258,18 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
+                                  Consumer<AuthProvider>(
+                                    builder: (context, authProvider, _) {
+                                      const double minimumBalance = 20.0;
+                                      final currentBalance = _rider?.balance ?? 0;
+                                      final hasSufficientBalance = currentBalance >= minimumBalance;
+                                      
+                                      // If status is available but balance is insufficient, show as offline
+                                      final effectiveStatus = (_rider!.status == AppConstants.riderStatusAvailable && !hasSufficientBalance)
+                                          ? AppConstants.riderStatusOffline
+                                          : _rider!.status;
+                                      
+                                      return Row(
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -242,15 +277,15 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: _rider!.status == AppConstants.riderStatusAvailable
+                                              color: effectiveStatus == AppConstants.riderStatusAvailable
                                               ? AppColors.success
-                                              : _rider!.status == AppConstants.riderStatusBusy
+                                                  : effectiveStatus == AppConstants.riderStatusBusy
                                                   ? AppColors.statusPending
                                                   : AppColors.textSecondary,
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
-                                          _rider!.status.toUpperCase(),
+                                              effectiveStatus.toUpperCase(),
                                           style: TextStyle(
                                             color: AppColors.textWhite,
                                             fontSize: 10,
@@ -259,6 +294,8 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                         ),
                                       ),
                                     ],
+                                      );
+                                    },
                                   ),
 
                                   Consumer<AuthProvider>(
@@ -298,7 +335,9 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                           ),
                                         );
                                       }
-                                      if ((_rider?.balance ?? 0) <= 0) {
+                                      const double minimumBalance = 20.0;
+                                      final currentBalance = _rider?.balance ?? 0;
+                                      if (currentBalance < minimumBalance) {
                                         return Padding(
                                           padding: const EdgeInsets.only(top: 8.0),
                                           child: Container(
@@ -320,7 +359,7 @@ class _RiderProfileScreenState extends State<RiderProfileScreen> {
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Text(
-                                                    'You need to top-up before going Available.',
+                                                    'You need at least ₱${minimumBalance.toStringAsFixed(2)} in your balance to go Available. Current balance: ₱${currentBalance.toStringAsFixed(2)}',
                                                     style: TextStyle(
                                                       color: AppColors.statusPending,
                                                       fontSize: 12,

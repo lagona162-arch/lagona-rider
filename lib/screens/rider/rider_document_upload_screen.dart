@@ -316,10 +316,17 @@ class _RiderDocumentUploadScreenState extends State<RiderDocumentUploadScreen> {
           _isUploading = false;
         });
 
+        // Extract the actual error message, removing "Exception: " prefix if present
+        String errorMessage = e.toString();
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring(11);
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to upload documents: $e'),
+            content: Text(errorMessage),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

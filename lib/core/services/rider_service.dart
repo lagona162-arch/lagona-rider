@@ -35,6 +35,21 @@ class RiderService {
         throw Exception('Your account is pending admin approval. You cannot change your status until your account is approved.');
       }
 
+      // Check balance requirement when setting status to "available"
+      if (status == 'available') {
+        const double minimumBalance = 20.0;
+        final riderResponse = await _supabase
+            .from('riders')
+            .select('balance')
+            .eq('id', riderId)
+            .single();
+        
+        final balance = (riderResponse['balance'] as num?)?.toDouble() ?? 0.0;
+        if (balance < minimumBalance) {
+          throw Exception('You need at least ₱${minimumBalance.toStringAsFixed(2)} in your balance to go Available. Your current balance is ₱${balance.toStringAsFixed(2)}.');
+        }
+      }
+
       final updateData = <String, dynamic>{
         'status': status,
         'last_active': DateTime.now().toIso8601String(),
