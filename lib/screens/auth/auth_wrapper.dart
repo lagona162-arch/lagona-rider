@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/location_service.dart';
+import '../../core/services/supabase_service.dart';
 import 'login_screen.dart';
 import '../rider/rider_home_screen.dart';
 import '../location/location_permission_screen.dart';
@@ -19,13 +22,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool _isCheckingLocation = true;
   bool _hasLocationPermission = false;
   final LocationService _locationService = LocationService();
+  StreamSubscription? _authStateSubscription;
+  bool _wasAuthenticated = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeAuth();
+      _setupAuthStateListener();
     });
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -34,11 +46,60 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.isAuthenticated && authProvider.user == null) {
-
       authProvider.loadUser();
     }
   }
 
+  void _setupAuthStateListener() {
+    // Listen to Supabase auth state changes
+    _authStateSubscription = SupabaseService.instance.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+      final session = data.session;
+      
+      if (mounted) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        
+        if (event == AuthChangeEvent.signedOut || session == null) {
+          // User signed out - reset state
+          _wasAuthenticated = false;
+          setState(() {
+            _isCheckingLocation = false;
+            _hasLocationPermission = false;
+          });
+          // Only call signOut if not already signed out to avoid recursion
+          if (authProvider.isAuthenticated) {
+            authProvider.signOut();
+          }
+        } else if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed) {
+          // User signed in or session refreshed - reload user and check location
+          final isNewLogin = !_wasAuthenticated;
+          _wasAuthenticated = true;
+          
+          if (authProvider.user == null) {
+            authProvider.loadUser().then((_) {
+              if (mounted && authProvider.isAuthenticated && authProvider.user != null) {
+                // Reset location state on new login
+                if (isNewLogin) {
+                  setState(() {
+                    _hasLocationPermission = false;
+                  });
+                }
+                _initializeAuth();
+              }
+            });
+          } else {
+            // Reset location state on new login
+            if (isNewLogin) {
+              setState(() {
+                _hasLocationPermission = false;
+              });
+            }
+            _initializeAuth();
+          }
+        }
+      }
+    });
+  }
 
   Future<void> _initializeAuth() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -53,7 +114,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
 
-
+    // Reset location checking state when auth state changes
+    if (mounted) {
+      setState(() {
+        _isCheckingLocation = true;
+      });
+    }
 
     await _checkLocationPermission();
   }
@@ -91,8 +157,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
+        // Track authentication state changes
+        final isAuthenticated = authProvider.isAuthenticated && authProvider.user != null;
+        
+        // Reset location state when transitioning from authenticated to unauthenticated
+        if (!isAuthenticated && _wasAuthenticated) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _isCheckingLocation = false;
+                _hasLocationPermission = false;
+                _wasAuthenticated = false;
+              });
+            }
+          });
+        }
+        
+        // Update wasAuthenticated flag
+        if (isAuthenticated && !_wasAuthenticated) {
+          _wasAuthenticated = true;
+        }
 
-        if (_isCheckingLocation) {
+        // Show loading while checking location permission
+        if (_isCheckingLocation && isAuthenticated) {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(),
@@ -100,40 +187,28 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        if (authProvider.isAuthenticated && authProvider.user != null) {
-
+        // Check if user is authenticated
+        if (isAuthenticated) {
           final role = authProvider.user!.role;
           
           if (role == AppConstants.roleRider) {
-
-
+            // Check location permission for riders
             if (!_hasLocationPermission) {
-
-
               return _LocationPermissionWrapper(
                 onPermissionGranted: () {
-
-
                   if (mounted) {
                     setState(() {
                       _hasLocationPermission = true;
                     });
-                    
-
-
-                    _checkLocationPermission().then((_) {
-
-
-                    });
+                    _checkLocationPermission();
                   }
                 },
               );
             } else {
-
               return const RiderHomeScreen();
             }
           } else {
-
+            // Non-rider role - show error
             return Scaffold(
               body: Center(
                 child: Column(
@@ -163,6 +238,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             );
           }
         } else {
+          // Not authenticated - show login screen
           return const LoginScreen();
         }
       },

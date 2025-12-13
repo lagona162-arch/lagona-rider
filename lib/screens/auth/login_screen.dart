@@ -42,11 +42,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success && mounted) {
-
-
-        await Future.delayed(const Duration(milliseconds: 100));
+        // AuthWrapper will automatically navigate based on auth state
+        // No need for manual navigation or delay
       } else if (mounted) {
-
         final errorMessage = authProvider.error ?? 'Login failed. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

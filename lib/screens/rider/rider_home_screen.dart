@@ -5,7 +5,6 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/services/rider_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/notification_service.dart';
-import '../auth/login_screen.dart';
 import 'rider_deliveries_screen.dart';
 import 'rider_profile_screen.dart';
 import 'rider_notifications_screen.dart';
@@ -165,11 +164,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> with WidgetsBindingOb
               final authProvider =
                   Provider.of<AuthProvider>(context, listen: false);
               await authProvider.signOut();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              }
+              // AuthWrapper will handle navigation automatically
             },
           ),
         ],
