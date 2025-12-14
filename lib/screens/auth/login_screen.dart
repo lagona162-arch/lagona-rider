@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/error_dialog.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -46,19 +47,10 @@ class _LoginScreenState extends State<LoginScreen> {
         // No need for manual navigation or delay
       } else if (mounted) {
         final errorMessage = authProvider.error ?? 'Login failed. Please try again.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Dismiss',
-              textColor: Colors.white,
-              onPressed: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-          ),
+        ErrorDialog.show(
+          context,
+          message: errorMessage,
+          title: 'Login Error',
         );
       }
     }
